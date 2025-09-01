@@ -1,88 +1,92 @@
-import * as React from 'react';
-import RouterLink from 'next/link';
-import { useRouter } from 'next/navigation';
-import Box from '@mui/material/Box';
-import Divider from '@mui/material/Divider';
-import ListItemIcon from '@mui/material/ListItemIcon';
-import MenuItem from '@mui/material/MenuItem';
-import MenuList from '@mui/material/MenuList';
-import Popover from '@mui/material/Popover';
-import Typography from '@mui/material/Typography';
-import { GearSixIcon } from '@phosphor-icons/react/dist/ssr/GearSix';
-import { SignOutIcon } from '@phosphor-icons/react/dist/ssr/SignOut';
-import { UserIcon } from '@phosphor-icons/react/dist/ssr/User';
+import * as React from "react";
+import RouterLink from "next/link";
+import { useRouter } from "next/navigation";
+import Box from "@mui/material/Box";
+import Divider from "@mui/material/Divider";
+import ListItemIcon from "@mui/material/ListItemIcon";
+import MenuItem from "@mui/material/MenuItem";
+import MenuList from "@mui/material/MenuList";
+import Popover from "@mui/material/Popover";
+import Typography from "@mui/material/Typography";
+import { GearSixIcon } from "@phosphor-icons/react/dist/ssr/GearSix";
+import { UserIcon } from "@phosphor-icons/react/dist/ssr/User";
 
-import { paths } from '@/paths';
-import { logger } from '@/lib/default-logger';
-import { useUser } from '@/hooks/use-user';
-import { authClient } from '@/components/auth/client';
+import { paths } from "@/paths";
+import { useProfile } from "@/hooks/use-profile";
+import { useUser } from "@/hooks/use-user";
+import { authClient } from "@/components/auth/client";
+import { SignOutIcon } from "@phosphor-icons/react";
 
-export interface UserPopoverProps {
-  anchorEl: Element | null;
-  onClose: () => void;
-  open: boolean;
+
+type UserPopoverProps = {
+	anchorEl: Element | null;
+	open: boolean;
+	onClose: () => void;
 }
 
-export function UserPopover({ anchorEl, onClose, open }: UserPopoverProps): React.JSX.Element {
-  const { checkSession } = useUser();
+export default function UserPopover({anchorEl, open, onClose}: UserPopoverProps) {
+	const router = useRouter();
+	const { user, isLoading, checkSession } = useUser();
+	const { profile } = useProfile();
 
-  const router = useRouter();
+	const username = profile?.username || user?.username;
+	const email = profile?.email || user?.email;
 
-  const handleSignOut = React.useCallback(async (): Promise<void> => {
-    try {
-      const { error } = await authClient.signOut();
 
-      if (error) {
-        logger.error('Sign out error', error);
-        return;
-      }
+	if (isLoading) {
+		// small skeleton placeholder
+		return <div className="w-9 h-9 rounded-full bg-gray-200 animate-pulse" />;
+	}
 
-      // Refresh the auth state
-      await checkSession?.();
+	const handleSignOut = async () => {
+		onClose();
+		const {error} = await authClient.signOut();
+		if (!error) {
+			await checkSession?.();
+			router.replace("/auth/sign-in");
+		} else {
+			console.error("Logout failed:", error)
+		}
+	}
 
-      // UserProvider, for this case, will not refresh the router and we need to do it manually
-      router.replace("/auth/sign-in");
-      // After refresh, AuthGuard will handle the redirect
-    } catch (error) {
-      logger.error('Sign out error', error);
-    }
-  }, [checkSession, router]);
-
-  return (
-    <Popover
-      anchorEl={anchorEl}
-      anchorOrigin={{ horizontal: 'left', vertical: 'bottom' }}
-      onClose={onClose}
-      open={open}
-      slotProps={{ paper: { sx: { width: '240px' } } }}
-    >
-      <Box sx={{ p: '16px 20px ' }}>
-        <Typography variant="subtitle1">Sofia Rivers</Typography>
-        <Typography color="text.secondary" variant="body2">
-          sofia.rivers@devias.io
-        </Typography>
-      </Box>
-      <Divider />
-      <MenuList disablePadding sx={{ p: '8px', '& .MuiMenuItem-root': { borderRadius: 1 } }}>
-        <MenuItem component={RouterLink} href={paths.dashboard.settings} onClick={onClose}>
-          <ListItemIcon>
-            <GearSixIcon fontSize="var(--icon-fontSize-md)" />
-          </ListItemIcon>
-          Settings
-        </MenuItem>
-        <MenuItem component={RouterLink} href={paths.dashboard.account} onClick={onClose}>
-          <ListItemIcon>
-            <UserIcon fontSize="var(--icon-fontSize-md)" />
-          </ListItemIcon>
-          Profile
-        </MenuItem>
-        <MenuItem onClick={handleSignOut}>
-          <ListItemIcon>
-            <SignOutIcon fontSize="var(--icon-fontSize-md)" />
-          </ListItemIcon>
-          Sign out
-        </MenuItem>
-      </MenuList>
-    </Popover>
-  );
+	return (
+		<>
+			
+			<Popover
+				anchorEl={anchorEl}
+				anchorOrigin={{ horizontal: "left", vertical: "bottom" }}
+				onClose={onClose}
+				open={open}
+				slotProps={{ paper: { sx: { width: "240px" } } }}
+			>
+				<Box sx={{ p: "16px 20px " }}>
+					<Typography variant="subtitle1">{username}</Typography>
+					<Typography color="text.secondary" variant="body2">
+						{email}
+					</Typography>
+				</Box>
+				<Divider />
+				<MenuList disablePadding sx={{ p: "8px", "& .MuiMenuItem-root": { borderRadius: 1 } }}>
+					<MenuItem component={RouterLink} href={paths.dashboard.settings} onClick={onClose}>
+						<ListItemIcon>
+							<GearSixIcon fontSize="var(--icon-fontSize-md)" />
+						</ListItemIcon>
+						Settings
+					</MenuItem>
+					<MenuItem component={RouterLink} href={paths.dashboard.account} onClick={onClose}>
+						<ListItemIcon>
+							<UserIcon fontSize="var(--icon-fontSize-md)" />
+						</ListItemIcon>
+						Profile
+					</MenuItem>
+					<MenuItem onClick={handleSignOut}>
+					<ListItemIcon>
+						<SignOutIcon fontSize="var(--icon-fontSize-md)" />
+					</ListItemIcon>
+					Sign out
+				</MenuItem>
+				</MenuList>
+			</Popover>
+		</>
+	);
 }
