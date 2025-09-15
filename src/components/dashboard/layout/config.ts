@@ -6,6 +6,13 @@ export const navItems = [
   {
     key: 'users', title: 'Users', href: paths.dashboard.users, icon: 'users'
   },
+  {
+    key: 'merchants', title: 'Merchants', href: paths.dashboard.merchants, icon: 'users'
+  },
+  { key: 'categories', title: 'Categories', href: paths.dashboard.categories, icon: 'tag' },
+  { key: 'designs', title: 'Designs', href: paths.dashboard.designs, icon: 'paint-brush' },
+  { key: "billboards", title: "Billboards", href: paths.dashboard.billboards, icon: "signpost" },
+  
   { key: 'customers', title: 'Customers', href: paths.dashboard.customers, icon: 'users' },
   { key: 'integrations', title: 'Integrations', href: paths.dashboard.integrations, icon: 'plugs-connected' },
   { key: 'settings', title: 'Settings', href: paths.dashboard.settings, icon: 'gear-six' },

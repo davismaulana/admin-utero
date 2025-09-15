@@ -1,48 +1,51 @@
-// src/app/dashboard/users/page.tsx
+// src/app/dashboard/merchants/page.tsx
 "use client";
 
 import * as React from "react";
-import { createUser, deleteUser, listUsers, updateUser, type UserRow } from "@/services/users";
+import { listMerchants, type MerchantRow } from "@/services/merchants";
+import { deleteUser, type UserRow } from "@/services/users"; // keep if you still delete via user API
 import DeleteIcon from "@mui/icons-material/Delete";
-import EditIcon from "@mui/icons-material/Edit";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import { Avatar, Box, Button, Chip, IconButton, Snackbar, Stack, TextField, Tooltip, Typography } from "@mui/material";
 import { DataGrid, GridColDef, GridSortModel } from "@mui/x-data-grid";
 
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
-import { UserFormDialog } from "@/components/dashboard/users/user-form-dialog";
+import { MerchantDetailDialog } from "@/components/dashboard/merchant/merchant-detail-dialog";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ?? "";
+const fmt = new Intl.DateTimeFormat("id-ID", {
+	dateStyle: "medium",
+	timeStyle: "short",
+});
 
-export default function UsersPage() {
-	const [rows, setRows] = React.useState<UserRow[]>([]);
+// simple masker: keep last n digits
+function maskNumber(n: string | undefined, keep: number = 4) {
+	if (!n) return "";
+	const s = String(n).replace(/\s+/g, "");
+	if (s.length <= keep) return s;
+	return s.slice(0, -keep).replace(/./g, "•") + s.slice(-keep);
+}
+
+export default function MerchantsPage() {
+	const [rows, setRows] = React.useState<MerchantRow[]>([]);
 	const [loading, setLoading] = React.useState(true);
 	const [page, setPage] = React.useState(0);
 	const [pageSize, setPageSize] = React.useState(10);
 	const [rowCount, setRowCount] = React.useState(0);
-	const [search, setSearch] = React.useState("");
-	const [sortModel, setSortModel] = React.useState<GridSortModel>([]);
-	const [toast, setToast] = React.useState<string | null>(null);
 	const [totalCount, setTotalCount] = React.useState(0);
-
-	// dialog state
-	const [formOpen, setFormOpen] = React.useState(false);
-	const [formMode, setFormMode] = React.useState<"create" | "edit">("create");
-	const [editing, setEditing] = React.useState<UserRow | null>(null);
+	const [search, setSearch] = React.useState("");
+	const [sortModel, setSortModel] = React.useState<GridSortModel>([{ field: "createdAt", sort: "desc" }]);
+	const [toast, setToast] = React.useState<string | null>(null);
 
 	const [confirmOpen, setConfirmOpen] = React.useState(false);
-	const [toDelete, setToDelete] = React.useState<UserRow | null>(null);
-
-	const fmt = new Intl.DateTimeFormat("id-ID", {
-		dateStyle: "medium",
-		timeStyle: "short",
-	});
+	const [toDelete, setToDelete] = React.useState<MerchantRow | null>(null);
+	const [detailOpen, setDetailOpen] = React.useState(false);
+	const [detailId, setDetailId] = React.useState<string | null>(null);
 
 	const fetchData = React.useCallback(async () => {
 		setLoading(true);
-		const sortBy = sortModel.length ? (sortModel[0].field as any) : "createdAt";
+		const sortBy = (sortModel[0]?.field as any) || "createdAt";
 		const sortDir = (sortModel[0]?.sort ?? "desc") as "asc" | "desc";
-		const res = await listUsers({
+		const res = await listMerchants({
 			page: page + 1,
 			pageSize,
 			search: search || undefined,
@@ -59,23 +62,34 @@ export default function UsersPage() {
 		fetchData().catch(console.error);
 	}, [fetchData]);
 
-	const columns: GridColDef<UserRow>[] = [
+	const columns: GridColDef<MerchantRow>[] = [
 		{
-			field: "profilePicture",
+			field: "avatar",
 			headerName: "Avatar",
 			width: 80,
 			sortable: false,
 			filterable: false,
-			renderCell: (params) => {
-				const src = params.value ? `${API_BASE}/${String(params.value)}` : undefined;
-				const initial = (params.row.username?.[0] ?? params.row.email?.[0] ?? "U").toUpperCase();
-				return <Avatar src={src}>{initial}</Avatar>;
+			renderCell: ({ row }) => {
+				const initial = (row.fullname?.[0] ?? row.companyName?.[0] ?? "M").toUpperCase();
+				return <Avatar>{initial}</Avatar>;
 			},
 		},
-		{ field: "username", headerName: "Username", flex: 1, minWidth: 160 },
-		{ field: "email", headerName: "Email", flex: 1, minWidth: 220 },
-		{ field: "phone", headerName: "Phone", minWidth: 140 },
-		{ field: "level", headerName: "Level", minWidth: 120 },
+		{ field: "fullname", headerName: "Fullname", flex: 1, minWidth: 180 },
+		{ field: "companyName", headerName: "Company", flex: 1, minWidth: 200 },
+		{
+			field: "ktp",
+			headerName: "KTP",
+			minWidth: 160,
+			valueFormatter: (p) => maskNumber(String(p)),
+		},
+		{
+			field: "npwp",
+			headerName: "NPWP",
+			minWidth: 160,
+			valueFormatter: (p) => maskNumber(String(p)),
+		},
+		{ field: "ktpAddress", headerName: "KTP Address", flex: 1.2, minWidth: 220 },
+		{ field: "officeAddress", headerName: "Office Address", flex: 1.2, minWidth: 220 },
 		{
 			field: "createdAt",
 			headerName: "Created",
@@ -88,28 +102,23 @@ export default function UsersPage() {
 		{
 			field: "actions",
 			headerName: "Actions",
-			width: 140,
+			width: 120,
 			sortable: false,
 			filterable: false,
 			renderCell: (params) => (
 				<Stack direction="row" spacing={1}>
 					<Tooltip title="View">
-						<IconButton size="small" onClick={() => alert(JSON.stringify(params.row, null, 2))}>
-							<VisibilityIcon fontSize="small" />
-						</IconButton>
-					</Tooltip>
-					<Tooltip title="Edit">
 						<IconButton
 							size="small"
 							onClick={() => {
-								setEditing(params.row);
-								setFormMode("edit");
-								setFormOpen(true);
+								setDetailId(params.row.id); // merchant id
+								setDetailOpen(true);
 							}}
 						>
-							<EditIcon fontSize="small" />
+							<VisibilityIcon fontSize="small" />
 						</IconButton>
 					</Tooltip>
+
 					<Tooltip title="Delete">
 						<IconButton
 							size="small"
@@ -131,13 +140,13 @@ export default function UsersPage() {
 		<Box sx={{ p: 2 }}>
 			<Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
 				<Stack direction="row" spacing={1} alignItems="center">
-					<Typography variant="h5">Users</Typography>
+					<Typography variant="h5">Merchants</Typography>
 					<Chip label={`Total: ${totalCount.toLocaleString()}`} size="small" variant="outlined" />
 				</Stack>
 				<Stack direction="row" spacing={1}>
 					<TextField
 						size="small"
-						placeholder="Search username/email/phone"
+						placeholder="Search fullname/company/npwp/ktp"
 						value={search}
 						onChange={(e) => setSearch(e.target.value)}
 						onKeyDown={(e) => {
@@ -156,16 +165,6 @@ export default function UsersPage() {
 					>
 						Search
 					</Button>
-					<Button
-						variant="outlined"
-						onClick={() => {
-							setEditing(null);
-							setFormMode("create");
-							setFormOpen(true);
-						}}
-					>
-						Add user
-					</Button>
 				</Stack>
 			</Stack>
 
@@ -177,13 +176,13 @@ export default function UsersPage() {
 					loading={loading}
 					pagination
 					paginationMode="server"
-					sortingMode="server"
 					rowCount={rowCount}
 					paginationModel={{ page, pageSize }}
 					onPaginationModelChange={(m) => {
 						setPage(m.page);
 						setPageSize(m.pageSize);
 					}}
+					sortingMode="server"
 					sortModel={sortModel}
 					onSortModelChange={setSortModel}
 					pageSizeOptions={[5, 10, 20, 50]}
@@ -191,47 +190,7 @@ export default function UsersPage() {
 				/>
 			</div>
 
-			{/* Create / Edit */}
-			<UserFormDialog
-				open={formOpen}
-				mode={formMode}
-				initial={
-					editing
-						? {
-								username: editing.username,
-								email: editing.email,
-								phone: editing.phone ?? "",
-								level: editing.level,
-							}
-						: undefined
-				}
-				onClose={() => setFormOpen(false)}
-				onSubmit={async (vals) => {
-					if (formMode === "create") {
-						await createUser({
-							username: vals.username,
-							email: vals.email,
-							phone: vals.phone,
-							level: vals.level,
-							password: vals.password || "",
-							confirmPassword: vals.confirmPassword || "",
-						});
-						setToast("User created");
-					} else if (editing) {
-						await updateUser(editing.id, {
-							username: vals.username,
-							email: vals.email,
-							phone: vals.phone,
-							level: vals.level,
-							password: vals.password,
-							confirmPassword: vals.confirmPassword,
-						});
-						setToast("User updated");
-					}
-					setFormOpen(false);
-					await fetchData();
-				}}
-			/>
+			<MerchantDetailDialog open={detailOpen} merchantId={detailId} onClose={() => setDetailOpen(false)} />
 
 			{/* Delete */}
 			<ConfirmDialog
@@ -239,15 +198,16 @@ export default function UsersPage() {
 				onClose={() => setConfirmOpen(false)}
 				onConfirm={async () => {
 					if (toDelete) {
-						await deleteUser(toDelete.id);
-						setToast("User deleted");
+						// If you have a /merchant delete endpoint, switch this to deleteMerchant(toDelete.id)
+						await deleteUser(toDelete.userId || toDelete.id); // deleting the underlying user (current flow)
+						setToast("Merchant deleted");
 						setConfirmOpen(false);
 						setToDelete(null);
 						await fetchData();
 					}
 				}}
-				title="Delete user"
-				content={`Delete ${toDelete?.username ?? "this user"}? This cannot be undone.`}
+				title="Delete merchant"
+				content={`Delete ${toDelete?.fullname ?? "this merchant"}? This cannot be undone.`}
 			/>
 
 			<Snackbar open={!!toast} autoHideDuration={2500} onClose={() => setToast(null)} message={toast ?? ""} />

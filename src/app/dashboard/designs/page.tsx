@@ -1,8 +1,7 @@
-// src/app/dashboard/users/page.tsx
 "use client";
 
 import * as React from "react";
-import { createUser, deleteUser, listUsers, updateUser, type UserRow } from "@/services/users";
+import { createDesign, deleteDesign, listDesigns, updateDesign, type DesignRow } from "@/services/designs";
 import DeleteIcon from "@mui/icons-material/Delete";
 import EditIcon from "@mui/icons-material/Edit";
 import VisibilityIcon from "@mui/icons-material/Visibility";
@@ -10,72 +9,112 @@ import { Avatar, Box, Button, Chip, IconButton, Snackbar, Stack, TextField, Tool
 import { DataGrid, GridColDef, GridSortModel } from "@mui/x-data-grid";
 
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
-import { UserFormDialog } from "@/components/dashboard/users/user-form-dialog";
+import { DesignFormDialog } from "@/components/dashboard/designs/design-form-dialog";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ?? "";
 
-export default function UsersPage() {
-	const [rows, setRows] = React.useState<UserRow[]>([]);
+function resolveImgUrl(u?: string) {
+	if (!u) return undefined;
+	if (/^(https?:|blob:|data:)/i.test(u)) return u;
+	try {
+		return new URL(u.replace(/^\/+/, ""), API_BASE + "/").href;
+	} catch {
+		return undefined;
+	}
+}
+
+export default function DesignsPage() {
+	const [rows, setRows] = React.useState<DesignRow[]>([]);
 	const [loading, setLoading] = React.useState(true);
 	const [page, setPage] = React.useState(0);
 	const [pageSize, setPageSize] = React.useState(10);
 	const [rowCount, setRowCount] = React.useState(0);
-	const [search, setSearch] = React.useState("");
-	const [sortModel, setSortModel] = React.useState<GridSortModel>([]);
-	const [toast, setToast] = React.useState<string | null>(null);
 	const [totalCount, setTotalCount] = React.useState(0);
+	const [search, setSearch] = React.useState("");
+	const [sortModel, setSortModel] = React.useState<GridSortModel>([{ field: "createdAt", sort: "desc" }]);
+	const [toast, setToast] = React.useState<string | null>(null);
 
-	// dialog state
 	const [formOpen, setFormOpen] = React.useState(false);
 	const [formMode, setFormMode] = React.useState<"create" | "edit">("create");
-	const [editing, setEditing] = React.useState<UserRow | null>(null);
+	const [formError, setFormError] = React.useState<string | null>(null);
+	const [editing, setEditing] = React.useState<DesignRow | null>(null);
 
 	const [confirmOpen, setConfirmOpen] = React.useState(false);
-	const [toDelete, setToDelete] = React.useState<UserRow | null>(null);
+	const [toDelete, setToDelete] = React.useState<DesignRow | null>(null);
 
 	const fmt = new Intl.DateTimeFormat("id-ID", {
 		dateStyle: "medium",
 		timeStyle: "short",
 	});
 
+	const currencyFmt = new Intl.NumberFormat("id-ID", {
+		style: "currency",
+		currency: "IDR",
+		maximumFractionDigits: 0,
+	});
+
+	// Safely extract the value regardless of how MUI calls valueFormatter
+	const getVFValue = (p: unknown) => (p && typeof p === "object" && "value" in (p as any) ? (p as any).value : p);
+
 	const fetchData = React.useCallback(async () => {
 		setLoading(true);
-		const sortBy = sortModel.length ? (sortModel[0].field as any) : "createdAt";
-		const sortDir = (sortModel[0]?.sort ?? "desc") as "asc" | "desc";
-		const res = await listUsers({
+		const res = await listDesigns({
 			page: page + 1,
 			pageSize,
 			search: search || undefined,
-			sortBy,
-			sortDir,
 		});
 		setRows(res.data);
-		setRowCount(res.meta.total);
-		setTotalCount(res.meta.total);
+		const total = res.meta?.total ?? res.data.length;
+		setRowCount(total);
+		setTotalCount(total);
 		setLoading(false);
-	}, [page, pageSize, search, sortModel]);
+	}, [page, pageSize, search]);
 
 	React.useEffect(() => {
 		fetchData().catch(console.error);
 	}, [fetchData]);
 
-	const columns: GridColDef<UserRow>[] = [
+	const columns: GridColDef<DesignRow>[] = [
 		{
-			field: "profilePicture",
-			headerName: "Avatar",
-			width: 80,
+			field: "image",
+			headerName: "Image",
+			width: 90,
 			sortable: false,
 			filterable: false,
-			renderCell: (params) => {
-				const src = params.value ? `${API_BASE}/${String(params.value)}` : undefined;
-				const initial = (params.row.username?.[0] ?? params.row.email?.[0] ?? "U").toUpperCase();
-				return <Avatar src={src}>{initial}</Avatar>;
+			renderCell: ({ row }) => {
+				const firstUrl = row.image?.[0]?.url as string | undefined;
+				const src = resolveImgUrl(firstUrl);
+				const letter = (row.name?.[0] ?? "D").toUpperCase();
+
+				return (
+					<Avatar
+						variant="rounded"
+						src={src}
+						sx={{ width: 48, height: 48 }}
+						imgProps={{ crossOrigin: "anonymous", referrerPolicy: "no-referrer" }}
+					>
+						{letter}
+					</Avatar>
+				);
 			},
 		},
-		{ field: "username", headerName: "Username", flex: 1, minWidth: 160 },
-		{ field: "email", headerName: "Email", flex: 1, minWidth: 220 },
-		{ field: "phone", headerName: "Phone", minWidth: 140 },
-		{ field: "level", headerName: "Level", minWidth: 120 },
+		{ field: "name", headerName: "Name", flex: 1, minWidth: 200 },
+		{ field: "description", headerName: "Description", flex: 1.5, minWidth: 260 },
+		{
+			field: "price",
+			headerName: "Price",
+			minWidth: 140,
+			headerAlign: "right",
+			align: "right",
+			valueFormatter: (p) => {
+				const v = getVFValue(p);
+				if (v === undefined || v === null || v === "") return "";
+				const n = Number(v);
+				// If it's not a number, just show the raw string
+				if (!Number.isFinite(n)) return String(v);
+				return currencyFmt.format(n); // e.g., Rp351
+			},
+		},
 		{
 			field: "createdAt",
 			headerName: "Created",
@@ -131,13 +170,14 @@ export default function UsersPage() {
 		<Box sx={{ p: 2 }}>
 			<Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
 				<Stack direction="row" spacing={1} alignItems="center">
-					<Typography variant="h5">Users</Typography>
+					<Typography variant="h5">Designs</Typography>
 					<Chip label={`Total: ${totalCount.toLocaleString()}`} size="small" variant="outlined" />
 				</Stack>
+
 				<Stack direction="row" spacing={1}>
 					<TextField
 						size="small"
-						placeholder="Search username/email/phone"
+						placeholder="Search name/description"
 						value={search}
 						onChange={(e) => setSearch(e.target.value)}
 						onKeyDown={(e) => {
@@ -164,7 +204,7 @@ export default function UsersPage() {
 							setFormOpen(true);
 						}}
 					>
-						Add user
+						Add design
 					</Button>
 				</Stack>
 			</Stack>
@@ -177,13 +217,14 @@ export default function UsersPage() {
 					loading={loading}
 					pagination
 					paginationMode="server"
-					sortingMode="server"
 					rowCount={rowCount}
 					paginationModel={{ page, pageSize }}
 					onPaginationModelChange={(m) => {
 						setPage(m.page);
 						setPageSize(m.pageSize);
 					}}
+					// Sorting client-side unless backend supports it
+					sortingMode="client"
 					sortModel={sortModel}
 					onSortModelChange={setSortModel}
 					pageSizeOptions={[5, 10, 20, 50]}
@@ -192,44 +233,45 @@ export default function UsersPage() {
 			</div>
 
 			{/* Create / Edit */}
-			<UserFormDialog
+			<DesignFormDialog
 				open={formOpen}
 				mode={formMode}
 				initial={
 					editing
 						? {
-								username: editing.username,
-								email: editing.email,
-								phone: editing.phone ?? "",
-								level: editing.level,
+								name: editing.name,
+								description: editing.description,
+								price: editing.price,
 							}
 						: undefined
 				}
+				serverError={formError}
 				onClose={() => setFormOpen(false)}
 				onSubmit={async (vals) => {
-					if (formMode === "create") {
-						await createUser({
-							username: vals.username,
-							email: vals.email,
-							phone: vals.phone,
-							level: vals.level,
-							password: vals.password || "",
-							confirmPassword: vals.confirmPassword || "",
-						});
-						setToast("User created");
-					} else if (editing) {
-						await updateUser(editing.id, {
-							username: vals.username,
-							email: vals.email,
-							phone: vals.phone,
-							level: vals.level,
-							password: vals.password,
-							confirmPassword: vals.confirmPassword,
-						});
-						setToast("User updated");
+					try {
+						setFormError(null);
+						if (formMode === "create") {
+							await createDesign({
+								name: vals.name,
+								description: vals.description,
+								price: vals.price,
+								images: vals.images,
+							});
+							setToast("Design created");
+						} else if (editing) {
+							await updateDesign(editing.id, {
+								name: vals.name,
+								description: vals.description,
+								price: vals.price,
+								images: vals.images, // optional; send if user selected new files
+							});
+							setToast("Design updated");
+						}
+						setFormOpen(false);
+						await fetchData();
+					} catch (e: any) {
+						setFormError(e?.message ?? "Failed to save");
 					}
-					setFormOpen(false);
-					await fetchData();
 				}}
 			/>
 
@@ -239,15 +281,15 @@ export default function UsersPage() {
 				onClose={() => setConfirmOpen(false)}
 				onConfirm={async () => {
 					if (toDelete) {
-						await deleteUser(toDelete.id);
-						setToast("User deleted");
+						await deleteDesign(toDelete.id);
+						setToast("Design deleted");
 						setConfirmOpen(false);
 						setToDelete(null);
 						await fetchData();
 					}
 				}}
-				title="Delete user"
-				content={`Delete ${toDelete?.username ?? "this user"}? This cannot be undone.`}
+				title="Delete design"
+				content={`Delete ${toDelete?.name ?? "this design"}? This cannot be undone.`}
 			/>
 
 			<Snackbar open={!!toast} autoHideDuration={2500} onClose={() => setToast(null)} message={toast ?? ""} />
