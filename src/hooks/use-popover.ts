@@ -8,21 +8,12 @@ interface PopoverController<T> {
   open: boolean;
 }
 
-export function usePopover<T = HTMLElement>(): PopoverController<T> {
-  const anchorRef = React.useRef<T>(null);
-  const [open, setOpen] = React.useState<boolean>(false);
+export function usePopover<T extends HTMLElement = HTMLElement>() {
+  const anchorRef = React.useRef<T | null>(null);
+  const [open, setOpen] = React.useState(false);
 
-  const handleOpen = React.useCallback(() => {
-    setOpen(true);
-  }, []);
+  const handleOpen = () => setOpen(true);
+  const handleClose = () => setOpen(false);
 
-  const handleClose = React.useCallback(() => {
-    setOpen(false);
-  }, []);
-
-  const handleToggle = React.useCallback(() => {
-    setOpen((prevState) => !prevState);
-  }, []);
-
-  return { anchorRef, handleClose, handleOpen, handleToggle, open };
+  return { anchorRef, open, handleOpen, handleClose };
 }

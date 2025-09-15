@@ -54,8 +54,8 @@ export const authClient = {
   },
 
   async getMe() {
-    const res = await api.get<{ user: any }>("/auth/me");
-    return res.data.user;
+    const res = await api.get<{ data: any }>("/user/profile/me");
+    return res.data.data;
   }
 };
 // B) BEARER TOKEN (if you return tokens in body):
