@@ -3,42 +3,71 @@ import api from "@/lib/api";
 
 export type BillboardImage = {
   id: string;
-  url: string;          // relative like "uploads/billboards/..."
-  type: string;         // "billboard"
+  url: string;
+  type: string;          // "billboard"
   billboardId: string;
   createdAt: string;
 };
 
 export type BillboardRow = {
   id: string;
+  ownerId: string;
   categoryId: string;
-  location: string;
   description: string;
+  location: string;
   cityId: string;
   provinceId: string;
-  status: "Available" | "Unavailable" | string;
+  cityName?: string | null;
+  provinceName?: string | null;
+
+  status: "Available" | "NotAvailable" | string;
   mode: "Buy" | "Rent" | string;
-  size: string;         // e.g. "3x4"
-  orientation: string;  // e.g. "Vertical"
-  display: string;      // e.g. "TwoSides"
-  lighting: string;     // e.g. "Frontlite"
-  tax: string;          // e.g. "PPN"
-  landOwner?: string;
+  size: string;
+  orientation: string;
+  display: string;
+  lighting: string;
+  tax: string;
+  landOwnership?: string;
+
   rentPrice?: string | number | null;
   sellPrice?: string | number | null;
   servicePrice?: string | number | null;
+
   createdAt: string;
   updatedAt: string;
+
+  isDeleted?: boolean;
+  deletedAt?: string | null;
+  deletedById?: string | null;
+
+  view?: number;
+  score?: number | null;
+  scoreAt?: string | null;
+
+  category?: { id: string; name: string; createdAt?: string; updatedAt?: string } | null;
+  owner?: { id: string; userId: string; fullname: string; companyName: string } | null;
   image: BillboardImage[];
+  city?: {
+    id: string;
+    name: string;
+    provinceId: string;
+    province?: { id: string; name: string } | null;
+  } | null;
+
+  // some lists include averageRating at item level; keep optional
+  averageRating?: number;
 };
 
 export type PageMeta = { page: number; pageSize: number; total: number; pages: number };
-export type ListResponse<T> = { status: boolean; message: string; data: T[]; meta?: PageMeta };
+export type ListResponse<T> = { status?: boolean; message?: string; data: T[]; meta?: PageMeta };
 
-// ———————————————————————————————————————————————————————————
-// Utilities
-// ———————————————————————————————————————————————————————————
-export function extractErrorMessage(e: any): string {
+export type BillboardDetail = BillboardRow & {
+  transaction?: any[]; // keep loose for now (you can type later)
+};
+
+export type DetailResponse = { status: boolean; message: string; data: BillboardDetail; averageRating?: number };
+
+function extractErrorMessage(e: any): string {
   const d = e?.response?.data;
   if (!d) return e?.message || "Request failed";
   if (Array.isArray(d.message)) return d.message.join(", ");
@@ -46,119 +75,90 @@ export function extractErrorMessage(e: any): string {
   return d.error || e?.message || "Request failed";
 }
 
-/** Accepts number or string like "12.000.000" → returns number, or undefined if empty */
+// ---------- Utils ----------
 function toIDRNumber(v?: string | number | null): number | undefined {
   if (v == null || v === "") return undefined;
   if (typeof v === "number") return Number.isFinite(v) ? v : undefined;
-  const digits = v.replace(/[^\d]/g, "");
-  if (!digits) return undefined;
-  const n = Number(digits);
+  const n = Number(String(v).replace(/[^\d]/g, ""));
   return Number.isFinite(n) ? n : undefined;
 }
-
-/** Append truthy scalar values to FormData */
-function fdSet(fd: FormData, key: string, val: unknown) {
-  if (val === undefined || val === null || val === "") return;
-  fd.append(key, String(val));
+function fdSet(fd: FormData, k: string, v: unknown) {
+  if (v === undefined || v === null || v === "") return;
+  fd.append(k, String(v));
 }
 
-// ———————————————————————————————————————————————————————————
-// List (server-driven; optional sort keys supported)
-// ———————————————————————————————————————————————————————————
+// ---------- List ----------
 export async function listBillboards(params: {
-  page?: number;
-  pageSize?: number;
-  search?: string;
-  sortBy?: "createdAt" | "updatedAt" | "location" | "status" | "mode" | "rentPrice" | "sellPrice" | "servicePrice";
-  sortDir?: "asc" | "desc";
+  page?: number; pageSize?: number; search?: string;
+  // server has sort in service; add if you wire it later
 }) {
-  const { data } = await api.get<ListResponse<BillboardRow>>("/billboard/all/", {
+  const { data } = await api.get<ListResponse<BillboardRow>>("/billboard/all", {
     params: {
       page: params.page,
       pageSize: params.pageSize,
       search: params.search || undefined,
-      sortBy: params.sortBy || undefined,
-      sortDir: params.sortDir || undefined,
     },
   });
   return data;
 }
 
-// ———————————————————————————————————————————————————————————
-// Detail
-// ———————————————————————————————————————————————————————————
-/** Extend row with optional detail-only fields. Keep optional so UI degrades gracefully. */
-export type BillboardDetail = BillboardRow & {
-  address?: string | null;
-  latitude?: number | null;
-  longitude?: number | null;
-  merchant?: { id: string; fullname: string; companyName: string } | null;
-  category?: {
-    id: string;
-    name: string;
-    createdAt?: string;
-    updatedAt?: string;
-  } | null;
-  city?: {
-    id: string;
-    name: string;
-    provinceId: string;
-    province?: {
-      id: string;
-      name: string;
-    } | null;
-  } | null;
-  provinceName?: string | null;
-  cityName?: string | null;
-  owner?: {
-    id: string;
-    fullname: string;
-    companyName: string;
-    ktp?: string;
-    npwp?: string;
-    ktpAddress?: string;
-    officeAddress?: string;
-    createdAt?: string;
-    updatedAt?: string;
-  } | null;
-};
-
-export async function getBillboardDetail(id: string) {
-  const { data } = await api.get<{ status: boolean; message: string; data: BillboardDetail }>(
-    `/billboard/detail/${id}`
-  );
-  return data.data;
+// Admin-only recycle bin (guarded by backend)
+export async function listBillboardsRecycleBin(params: { page?: number; pageSize?: number; search?: string }) {
+  const { data } = await api.get<ListResponse<BillboardRow>>("/billboard/recycle-bin", {
+    params: {
+      page: params.page,
+      pageSize: params.pageSize,
+      search: params.search || undefined,
+    },
+  });
+  return data;
 }
 
-// ———————————————————————————————————————————————————————————
-// Create / Update / Delete
-// ———————————————————————————————————————————————————————————
+// Merchant-only: mine
+export async function listMyBillboards(params: { page?: number; pageSize?: number; search?: string }) {
+  const { data } = await api.get<ListResponse<BillboardRow>>("/billboard/myBillboards", {
+    params: {
+      page: params.page,
+      pageSize: params.pageSize,
+      search: params.search || undefined,
+    },
+  });
+  return data;
+}
+
+// ---------- Detail ----------
+export async function getBillboardDetail(id: string) {
+  const { data } = await api.get<DetailResponse>(`/billboard/detail/${id}`);
+  return data; // keep averageRating available to caller
+}
+
+// ---------- Create / Update ----------
 export type CreateBillboardInput = {
   categoryId: string;
-  location: string;
   description: string;
+  location: string;
   cityId: string;
   provinceId: string;
-  status: string;       // "Available" | "Unavailable"
-  mode: string;         // "Buy" | "Rent"
+  status: string;
+  mode: string;
   size: string;
   orientation: string;
   display: string;
   lighting: string;
   tax: string;
-  landOwner?: string;
+  landOwnership?: string;
   rentPrice?: string | number;
   sellPrice?: string | number;
   servicePrice?: string | number;
-  images?: File[];      // optional new uploads
+  images?: File[];
 };
 
 export async function createBillboard(input: CreateBillboardInput) {
   try {
     const fd = new FormData();
     fdSet(fd, "categoryId", input.categoryId);
-    fdSet(fd, "location", input.location);
     fdSet(fd, "description", input.description);
+    fdSet(fd, "location", input.location);
     fdSet(fd, "cityId", input.cityId);
     fdSet(fd, "provinceId", input.provinceId);
     fdSet(fd, "status", input.status);
@@ -168,7 +168,7 @@ export async function createBillboard(input: CreateBillboardInput) {
     fdSet(fd, "display", input.display);
     fdSet(fd, "lighting", input.lighting);
     fdSet(fd, "tax", input.tax);
-    fdSet(fd, "landOwner", input.landOwner);
+    fdSet(fd, "landOwnership", input.landOwnership);
 
     const rent = toIDRNumber(input.rentPrice);
     const sell = toIDRNumber(input.sellPrice);
@@ -177,71 +177,31 @@ export async function createBillboard(input: CreateBillboardInput) {
     if (sell !== undefined) fdSet(fd, "sellPrice", sell);
     if (service !== undefined) fdSet(fd, "servicePrice", service);
 
-    if (input.images?.length) {
-      input.images.forEach((file) => fd.append("images", file));
-      // If your backend expects "images[]" instead:
-      // input.images.forEach((file) => fd.append("images[]", file));
-    }
+    input.images?.forEach((f) => fd.append("images", f));
 
-    const { data } = await api.post<{ status: boolean; message: string; data: BillboardDetail }>(
-      "/billboard/create",
-      fd,
-      { headers: { "Content-Type": "multipart/form-data" } }
-    );
-    return data.data;
+    const res = await api.post<{ status: boolean; message: string; data: BillboardDetail }>("/billboard", fd, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+    return res.data.data;
   } catch (e) {
     throw new Error(extractErrorMessage(e));
   }
 }
 
-export type UpdateBillboardInput = Partial<
-  Pick<
-    CreateBillboardInput,
-    | "categoryId"
-    | "location"
-    | "description"
-    | "cityId"
-    | "provinceId"
-    | "status"
-    | "mode"
-    | "size"
-    | "orientation"
-    | "display"
-    | "lighting"
-    | "tax"
-    | "landOwner"
-    | "rentPrice"
-    | "sellPrice"
-    | "servicePrice"
-  >
-> & {
-  /** Add new images */
-  imagesAdd?: File[];
-  /** Delete existing images by id */
-  imagesDeleteIds?: string[];
+export type UpdateBillboardInput = Partial<CreateBillboardInput> & {
+  images?: File[];           // add new images
+  imagesDeleteIds?: string[]; // if your DTO supports it
 };
 
 export async function updateBillboard(id: string, input: UpdateBillboardInput) {
   try {
-    // Prefer PATCH; switch to PUT if your backend requires.
-    // If backend expects JSON for simple fields and multipart only when files exist:
-    const hasFiles = !!(input.imagesAdd && input.imagesAdd.length);
-    if (hasFiles) {
+    const hasFiles = !!input.images?.length;
+    if (hasFiles || input.imagesDeleteIds?.length) {
       const fd = new FormData();
-      // scalars
-      fdSet(fd, "categoryId", input.categoryId);
-      fdSet(fd, "location", input.location);
-      fdSet(fd, "description", input.description);
-      fdSet(fd, "cityId", input.cityId);
-      fdSet(fd, "provinceId", input.provinceId);
-      fdSet(fd, "status", input.status);
-      fdSet(fd, "mode", input.mode);
-      fdSet(fd, "size", input.size);
-      fdSet(fd, "orientation", input.orientation);
-      fdSet(fd, "display", input.display);
-      fdSet(fd, "lighting", input.lighting);
-      fdSet(fd, "tax", input.tax);
-      fdSet(fd, "landOwner", input.landOwner);
+      ([
+        "categoryId", "description", "location", "cityId", "provinceId", "status", "mode",
+        "size", "orientation", "display", "lighting", "tax", "landOwnership"
+      ] as const).forEach((k) => fdSet(fd, k, (input as any)[k]));
 
       const rent = toIDRNumber(input.rentPrice);
       const sell = toIDRNumber(input.sellPrice);
@@ -250,26 +210,24 @@ export async function updateBillboard(id: string, input: UpdateBillboardInput) {
       if (sell !== undefined) fdSet(fd, "sellPrice", sell);
       if (service !== undefined) fdSet(fd, "servicePrice", service);
 
-      input.imagesAdd?.forEach((file) => fd.append("images", file));
-      input.imagesDeleteIds?.forEach((imgId) => fd.append("imagesDeleteIds[]", imgId));
+      input.images?.forEach((f) => fd.append("images", f));
+      input.imagesDeleteIds?.forEach((id) => fd.append("imagesDeleteIds[]", id)); // only if DTO allows
 
       const { data } = await api.patch<{ status: boolean; message: string; data: BillboardDetail }>(
-        `/billboard/id/${id}`,
+        `/billboard/${id}`,
         fd,
         { headers: { "Content-Type": "multipart/form-data" } }
       );
       return data.data;
     } else {
-      // JSON-only patch
       const payload: Record<string, any> = {};
-      const set = (k: keyof UpdateBillboardInput) => {
-        const v = input[k];
-        if (v !== undefined && v !== null && v !== "") (payload as any)[k] = v;
-      };
-      set("categoryId"); set("location"); set("description"); set("cityId"); set("provinceId");
-      set("status"); set("mode"); set("size"); set("orientation"); set("display"); set("lighting");
-      set("tax"); set("landOwner");
-
+      ([
+        "categoryId", "description", "location", "cityId", "provinceId", "status", "mode",
+        "size", "orientation", "display", "lighting", "tax", "landOwnership"
+      ] as const).forEach((k) => {
+        const v = (input as any)[k];
+        if (v !== undefined && v !== null && v !== "") payload[k] = v;
+      });
       const rent = toIDRNumber(input.rentPrice);
       const sell = toIDRNumber(input.sellPrice);
       const service = toIDRNumber(input.servicePrice);
@@ -280,7 +238,7 @@ export async function updateBillboard(id: string, input: UpdateBillboardInput) {
       if (input.imagesDeleteIds?.length) payload.imagesDeleteIds = input.imagesDeleteIds;
 
       const { data } = await api.patch<{ status: boolean; message: string; data: BillboardDetail }>(
-        `/billboard/id/${id}`,
+        `/billboard/${id}`,
         payload
       );
       return data.data;
@@ -290,22 +248,53 @@ export async function updateBillboard(id: string, input: UpdateBillboardInput) {
   }
 }
 
+// ---------- Delete / Restore / Purge ----------
 export async function deleteBillboard(id: string) {
-  // try {
-  //   const { data } = await api.delete<{ status: boolean; message: string }>(`/billboard/${id}`);
-  //   if (data && data.status === false) {
-  //     throw new Error(data.message || "Delete failed");
-  //   }
-  //   return data;
-  // } catch (e: any) {
-  //   // show server message if available
-  //   const msg =
-  //     e?.response?.data?.message ??
-  //     e?.response?.data?.error ??
-  //     e?.message ??
-  //     "Request failed";
-  //   throw new Error(msg);
-  // }
-  const { data } = await api.delete<{ status: boolean; message: string }>(`/billboard/${id}`);
+  try {
+    const { data } = await api.delete<{ status: boolean; message: string }>(`/billboard/${id}`);
+    if (data && data.status === false) throw new Error(data.message || "Delete failed");
+    return data;
+  } catch (e) {
+    throw new Error(extractErrorMessage(e));
+  }
+}
+
+export async function restoreBillboard(id: string) {
+  try {
+    const { data } = await api.post<{ status: boolean; message: string }>(`/billboard/${id}/restore`, {});
+    return data;
+  } catch (e) {
+    throw new Error(extractErrorMessage(e));
+  }
+}
+
+export async function purgeBillboard(id: string) {
+  try {
+    const { data } = await api.delete<{ status: boolean; message: string }>(`/billboard/${id}/purge`, {
+      params: { confirm: "true" },
+    });
+    return data;
+  } catch (e) {
+    throw new Error(extractErrorMessage(e));
+  }
+}
+
+// ---------- Recommendations ----------
+export async function getRecommendationsDiagnostics(q: {
+  page?: number;
+  pageSize?: number;
+  categoryId?: string;
+  province?: string;
+  city?: string;
+}): Promise<{ data: BillboardRow[]; meta?: PageMeta }> {
+  const { data } = await api.get<{ data: BillboardRow[]; meta?: PageMeta }>(
+    "/billboard/recommendations/diagnostics",
+    { params: q }
+  );
+  return data;
+}
+
+export async function recomputeRecommendations(): Promise<{ updated: number }> {
+  const { data } = await api.post<{ updated: number }>("/billboard/recommendations/recompute", {});
   return data;
 }

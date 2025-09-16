@@ -4,10 +4,11 @@ export const paths = {
   dashboard: {
     overview: '/dashboard',
     users: '/dashboard/users',
-    merchants: '/dashboard/merchants',
+    sellers: '/dashboard/sellers',
     categories: '/dashboard/categories',
     designs: '/dashboard/designs',
     billboards: "/dashboard/billboards",
+    recommendations: '/dashboard/billboards/recommendations',
     account: '/dashboard/account',
     customers: '/dashboard/customers',
     integrations: '/dashboard/integrations',

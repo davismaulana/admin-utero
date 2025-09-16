@@ -1,7 +1,6 @@
-// src/services/merchants.ts
 import api from "@/lib/api";
 
-export type MerchantRow = {
+export type SellerRow = {
   id: string;
   userId: string;
   fullname: string;
@@ -25,14 +24,14 @@ function extractErrorMessage(e: any): string {
   return d.error || e?.message || "Request failed";
 }
 
-export async function listMerchants(params: {
+export async function listSellers(params: {
   page?: number;
   pageSize?: number;
   search?: string;
   sortBy?: "createdAt" | "updatedAt" | "fullname" | "companyName";
   sortDir?: "asc" | "desc";
 }) {
-  const { data } = await api.get<ListResponse<MerchantRow>>("/merchant/all", {
+  const { data } = await api.get<ListResponse<SellerRow>>("/seller/all", {
     params: {
       page: params.page,
       pageSize: params.pageSize,
@@ -44,28 +43,28 @@ export async function listMerchants(params: {
   return data;
 }
 
-// add to your existing merchants service
-export type MerchantDetail = MerchantRow & {
+// add to your existing sellers service
+export type SellerDetail = SellerRow & {
   user: {
     id: string; username: string; email: string;
-    phone?: string | null; level: "MERCHANT" | "ADMIN" | "BUYER";
+    phone?: string | null; level: "SELLER" | "ADMIN" | "BUYER";
     provider: string; profilePicture?: string | null;
     createdAt: string; updatedAt: string;
   };
   billboards: Array<{ id: string; location?: string | null; size?: string | null; createdAt: string }>;
 };
 
-export async function getMerchantDetail(id: string) {
-  const { data } = await api.get<{ status: boolean; message: string; data: MerchantDetail }>(
-    `/merchant/detail/${id}`
+export async function getSellerDetail(id: string) {
+  const { data } = await api.get<{ status: boolean; message: string; data: SellerDetail }>(
+    `/seller/detail/${id}`
   );
   return data.data;
 }
 
-// optionally, if you support deleting merchants directly
-export async function deleteMerchant(id: string) {
+// optionally, if you support deleting sellers directly
+export async function deleteSeller(id: string) {
   try {
-    const { data } = await api.delete<{ status: boolean; message: string }>(`/merchant/id/${id}`);
+    const { data } = await api.delete<{ status: boolean; message: string }>(`/seller/id/${id}`);
     return data;
   } catch (e) {
     throw new Error(extractErrorMessage(e));

@@ -1,4 +1,4 @@
-import { FileTextIcon, PaintBrushIcon, SignpostIcon, StorefrontIcon, TagIcon } from "@phosphor-icons/react";
+import { FileTextIcon, PaintBrushIcon, SignpostIcon, Sparkle, StorefrontIcon, TagIcon } from "@phosphor-icons/react";
 import type { Icon } from "@phosphor-icons/react/dist/lib/types";
 import { ChartPieIcon } from "@phosphor-icons/react/dist/ssr/ChartPie";
 import { GearSixIcon } from "@phosphor-icons/react/dist/ssr/GearSix";
@@ -20,4 +20,5 @@ export const navIcons = {
 	"file-text": FileTextIcon,
 	"paint-brush": PaintBrushIcon,
 	signpost: SignpostIcon,
+	sparkles: Sparkle,
 } as Record<string, Icon>;

@@ -2,7 +2,7 @@
 "use client";
 
 import * as React from "react";
-import { listMerchants, type MerchantRow } from "@/services/merchants";
+import { listSellers, type SellerRow } from "@/services/sellers";
 import { deleteUser, type UserRow } from "@/services/users"; // keep if you still delete via user API
 import DeleteIcon from "@mui/icons-material/Delete";
 import VisibilityIcon from "@mui/icons-material/Visibility";
@@ -10,7 +10,7 @@ import { Avatar, Box, Button, Chip, IconButton, Snackbar, Stack, TextField, Tool
 import { DataGrid, GridColDef, GridSortModel } from "@mui/x-data-grid";
 
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
-import { MerchantDetailDialog } from "@/components/dashboard/merchant/merchant-detail-dialog";
+import { SellerDetailDialog } from "@/components/dashboard/sellers/merchant-detail-dialog";
 
 const fmt = new Intl.DateTimeFormat("id-ID", {
 	dateStyle: "medium",
@@ -25,8 +25,8 @@ function maskNumber(n: string | undefined, keep: number = 4) {
 	return s.slice(0, -keep).replace(/./g, "•") + s.slice(-keep);
 }
 
-export default function MerchantsPage() {
-	const [rows, setRows] = React.useState<MerchantRow[]>([]);
+export default function SellersPage() {
+	const [rows, setRows] = React.useState<SellerRow[]>([]);
 	const [loading, setLoading] = React.useState(true);
 	const [page, setPage] = React.useState(0);
 	const [pageSize, setPageSize] = React.useState(10);
@@ -37,7 +37,7 @@ export default function MerchantsPage() {
 	const [toast, setToast] = React.useState<string | null>(null);
 
 	const [confirmOpen, setConfirmOpen] = React.useState(false);
-	const [toDelete, setToDelete] = React.useState<MerchantRow | null>(null);
+	const [toDelete, setToDelete] = React.useState<SellerRow | null>(null);
 	const [detailOpen, setDetailOpen] = React.useState(false);
 	const [detailId, setDetailId] = React.useState<string | null>(null);
 
@@ -45,7 +45,7 @@ export default function MerchantsPage() {
 		setLoading(true);
 		const sortBy = (sortModel[0]?.field as any) || "createdAt";
 		const sortDir = (sortModel[0]?.sort ?? "desc") as "asc" | "desc";
-		const res = await listMerchants({
+		const res = await listSellers({
 			page: page + 1,
 			pageSize,
 			search: search || undefined,
@@ -62,7 +62,7 @@ export default function MerchantsPage() {
 		fetchData().catch(console.error);
 	}, [fetchData]);
 
-	const columns: GridColDef<MerchantRow>[] = [
+	const columns: GridColDef<SellerRow>[] = [
 		{
 			field: "avatar",
 			headerName: "Avatar",
@@ -111,7 +111,7 @@ export default function MerchantsPage() {
 						<IconButton
 							size="small"
 							onClick={() => {
-								setDetailId(params.row.id); // merchant id
+								setDetailId(params.row.id); // seller id
 								setDetailOpen(true);
 							}}
 						>
@@ -140,7 +140,7 @@ export default function MerchantsPage() {
 		<Box sx={{ p: 2 }}>
 			<Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
 				<Stack direction="row" spacing={1} alignItems="center">
-					<Typography variant="h5">Merchants</Typography>
+					<Typography variant="h5">Sellers</Typography>
 					<Chip label={`Total: ${totalCount.toLocaleString()}`} size="small" variant="outlined" />
 				</Stack>
 				<Stack direction="row" spacing={1}>
@@ -190,7 +190,7 @@ export default function MerchantsPage() {
 				/>
 			</div>
 
-			<MerchantDetailDialog open={detailOpen} merchantId={detailId} onClose={() => setDetailOpen(false)} />
+			<SellerDetailDialog open={detailOpen} sellerId={detailId} onClose={() => setDetailOpen(false)} />
 
 			{/* Delete */}
 			<ConfirmDialog
@@ -198,16 +198,16 @@ export default function MerchantsPage() {
 				onClose={() => setConfirmOpen(false)}
 				onConfirm={async () => {
 					if (toDelete) {
-						// If you have a /merchant delete endpoint, switch this to deleteMerchant(toDelete.id)
+						// If you have a /seller delete endpoint, switch this to deleteMerchant(toDelete.id)
 						await deleteUser(toDelete.userId || toDelete.id); // deleting the underlying user (current flow)
-						setToast("Merchant deleted");
+						setToast("Seller deleted");
 						setConfirmOpen(false);
 						setToDelete(null);
 						await fetchData();
 					}
 				}}
-				title="Delete merchant"
-				content={`Delete ${toDelete?.fullname ?? "this merchant"}? This cannot be undone.`}
+				title="Delete seller"
+				content={`Delete ${toDelete?.fullname ?? "this seller"}? This cannot be undone.`}
 			/>
 
 			<Snackbar open={!!toast} autoHideDuration={2500} onClose={() => setToast(null)} message={toast ?? ""} />

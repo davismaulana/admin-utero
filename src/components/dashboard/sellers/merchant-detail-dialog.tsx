@@ -2,11 +2,11 @@
 
 import * as React from "react";
 import {
-  Avatar, Button, Chip, Dialog, DialogContent, DialogTitle, Divider,
+  Avatar, Chip, Dialog, DialogContent, DialogTitle, Divider,
   Grid, IconButton, Paper, Skeleton, Stack, Typography
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
-import { getMerchantDetail, type MerchantDetail } from "@/services/merchants";
+import { getSellerDetail, type SellerDetail } from "@/services/sellers";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ?? "";
 
@@ -25,38 +25,38 @@ function maskNumber(n?: string | null, keep = 4) {
   return s.slice(0, -keep).replace(/./g, "•") + s.slice(-keep);
 }
 
-export type MerchantDetailDialogProps = {
+export type SellerDetailDialogProps = {
   open: boolean;
-  merchantId: string | null;
+  sellerId: string | null;
   onClose: () => void;
 };
 
-export function MerchantDetailDialog({ open, merchantId, onClose }: MerchantDetailDialogProps) {
-  const [data, setData] = React.useState<MerchantDetail | null>(null);
+export function SellerDetailDialog({ open, sellerId, onClose }: SellerDetailDialogProps) {
+  const [data, setData] = React.useState<SellerDetail | null>(null);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
-    if (!open || !merchantId) return;
+    if (!open || !sellerId) return;
     let ignore = false;
     (async () => {
       try {
         setLoading(true);
-        const d = await getMerchantDetail(merchantId);
+        const d = await getSellerDetail(sellerId);
         if (!ignore) { setData(d); setError(null); }
       } catch (e: any) {
-        if (!ignore) setError(e?.message ?? "Failed to load merchant");
+        if (!ignore) setError(e?.message ?? "Failed to load seller");
       } finally {
         if (!ignore) setLoading(false);
       }
     })();
     return () => { ignore = true; };
-  }, [open, merchantId]);
+  }, [open, sellerId]);
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="md">
       <DialogTitle sx={{ pr: 6 }}>
-        Merchant detail
+        Seller detail
         <IconButton onClick={onClose} sx={{ position: "absolute", right: 8, top: 8 }}>
           <CloseIcon />
         </IconButton>
@@ -109,7 +109,7 @@ export function MerchantDetailDialog({ open, merchantId, onClose }: MerchantDeta
     </Dialog>
   );
 
-  function Header({ data }: { data: MerchantDetail }) {
+  function Header({ data }: { data: SellerDetail }) {
     const avatarLetter = (data.fullname?.[0] ?? data.companyName?.[0] ?? "M").toUpperCase();
     const userAvatar = resolveImgUrl(data.user?.profilePicture);
     return (
