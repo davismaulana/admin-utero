@@ -1,5 +1,6 @@
-import { FileTextIcon, PaintBrushIcon, SignpostIcon, Sparkle, StorefrontIcon, TagIcon } from "@phosphor-icons/react";
+import { FileTextIcon, MapPinIcon, PaintBrushIcon, RecycleIcon, SignpostIcon, Sparkle, StorefrontIcon, TagIcon } from "@phosphor-icons/react";
 import type { Icon } from "@phosphor-icons/react/dist/lib/types";
+import { ImageIcon } from "@phosphor-icons/react/dist/ssr";
 import { ChartPieIcon } from "@phosphor-icons/react/dist/ssr/ChartPie";
 import { GearSixIcon } from "@phosphor-icons/react/dist/ssr/GearSix";
 import { PlugsConnectedIcon } from "@phosphor-icons/react/dist/ssr/PlugsConnected";
@@ -21,4 +22,7 @@ export const navIcons = {
 	"paint-brush": PaintBrushIcon,
 	signpost: SignpostIcon,
 	sparkles: Sparkle,
+	"map-pin": MapPinIcon,
+	"recycle-bin": RecycleIcon,
+	"galleries": ImageIcon
 } as Record<string, Icon>;

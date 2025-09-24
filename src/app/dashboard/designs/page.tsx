@@ -1,15 +1,36 @@
 "use client";
 
 import * as React from "react";
-import { createDesign, deleteDesign, listDesigns, updateDesign, type DesignRow } from "@/services/designs";
+import {
+	createDesign,
+	deleteDesign,
+	idrFmt,
+	listDesigns,
+	toIDRNumber,
+	updateDesign,
+	type DesignRow,
+} from "@/services/designs";
 import DeleteIcon from "@mui/icons-material/Delete";
 import EditIcon from "@mui/icons-material/Edit";
 import VisibilityIcon from "@mui/icons-material/Visibility";
-import { Avatar, Box, Button, Chip, IconButton, Snackbar, Stack, TextField, Tooltip, Typography } from "@mui/material";
+import {
+	Alert,
+	Avatar,
+	Box,
+	Button,
+	Chip,
+	IconButton,
+	Snackbar,
+	Stack,
+	TextField,
+	Tooltip,
+	Typography,
+} from "@mui/material";
 import { DataGrid, GridColDef, GridSortModel } from "@mui/x-data-grid";
 
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
 import { DesignFormDialog } from "@/components/dashboard/designs/design-form-dialog";
+import { DesignDetailDialog } from "@/components/dashboard/designs/design-detail-dialog";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ?? "";
 
@@ -32,7 +53,7 @@ export default function DesignsPage() {
 	const [totalCount, setTotalCount] = React.useState(0);
 	const [search, setSearch] = React.useState("");
 	const [sortModel, setSortModel] = React.useState<GridSortModel>([{ field: "createdAt", sort: "desc" }]);
-	const [toast, setToast] = React.useState<string | null>(null);
+	const [toast, setToast] = React.useState<{ msg: string; severity: "success" | "error" } | null>(null);
 
 	const [formOpen, setFormOpen] = React.useState(false);
 	const [formMode, setFormMode] = React.useState<"create" | "edit">("create");
@@ -41,6 +62,9 @@ export default function DesignsPage() {
 
 	const [confirmOpen, setConfirmOpen] = React.useState(false);
 	const [toDelete, setToDelete] = React.useState<DesignRow | null>(null);
+
+	const [detailOpen, setDetailOpen] = React.useState(false);
+	const [detailId, setDetailId] = React.useState<string | null>(null);
 
 	const fmt = new Intl.DateTimeFormat("id-ID", {
 		dateStyle: "medium",
@@ -100,20 +124,29 @@ export default function DesignsPage() {
 		},
 		{ field: "name", headerName: "Name", flex: 1, minWidth: 200 },
 		{ field: "description", headerName: "Description", flex: 1.5, minWidth: 260 },
+		// {
+		// 	field: "price",
+		// 	headerName: "Price",
+		// 	minWidth: 140,
+		// 	headerAlign: "right",
+		// 	align: "right",
+		// 	valueFormatter: (p) => {
+		// 		const v = getVFValue(p);
+		// 		if (v === undefined || v === null || v === "") return "";
+		// 		const n = Number(v);
+		// 		// If it's not a number, just show the raw string
+		// 		if (!Number.isFinite(n)) return String(v);
+		// 		return currencyFmt.format(n); // e.g., Rp351
+		// 	},
+		// },
+
 		{
 			field: "price",
 			headerName: "Price",
 			minWidth: 140,
 			headerAlign: "right",
 			align: "right",
-			valueFormatter: (p) => {
-				const v = getVFValue(p);
-				if (v === undefined || v === null || v === "") return "";
-				const n = Number(v);
-				// If it's not a number, just show the raw string
-				if (!Number.isFinite(n)) return String(v);
-				return currencyFmt.format(n); // e.g., Rp351
-			},
+			valueGetter: (_v, row) => idrFmt.format(toIDRNumber(row.price) ?? 0),
 		},
 		{
 			field: "createdAt",
@@ -133,7 +166,13 @@ export default function DesignsPage() {
 			renderCell: (params) => (
 				<Stack direction="row" spacing={1}>
 					<Tooltip title="View">
-						<IconButton size="small" onClick={() => alert(JSON.stringify(params.row, null, 2))}>
+						<IconButton
+							size="small"
+							onClick={() => {
+								setDetailId(params.row.id);
+								setDetailOpen(true);
+							}}
+						>
 							<VisibilityIcon fontSize="small" />
 						</IconButton>
 					</Tooltip>
@@ -257,7 +296,7 @@ export default function DesignsPage() {
 								price: vals.price,
 								images: vals.images,
 							});
-							setToast("Design created");
+							setToast({ msg: "Design created", severity: "success" });
 						} else if (editing) {
 							await updateDesign(editing.id, {
 								name: vals.name,
@@ -265,7 +304,7 @@ export default function DesignsPage() {
 								price: vals.price,
 								images: vals.images, // optional; send if user selected new files
 							});
-							setToast("Design updated");
+							setToast({ msg: "Design updated", severity: "success" });
 						}
 						setFormOpen(false);
 						await fetchData();
@@ -282,7 +321,7 @@ export default function DesignsPage() {
 				onConfirm={async () => {
 					if (toDelete) {
 						await deleteDesign(toDelete.id);
-						setToast("Design deleted");
+						setToast({ msg: "Design deleted", severity: "success" });
 						setConfirmOpen(false);
 						setToDelete(null);
 						await fetchData();
@@ -292,7 +331,20 @@ export default function DesignsPage() {
 				content={`Delete ${toDelete?.name ?? "this design"}? This cannot be undone.`}
 			/>
 
-			<Snackbar open={!!toast} autoHideDuration={2500} onClose={() => setToast(null)} message={toast ?? ""} />
+			<Snackbar
+				open={!!toast}
+				autoHideDuration={1800}
+				onClose={() => setToast(null)}
+				anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+			>
+				{toast ? (
+					<Alert onClose={() => setToast(null)} severity={toast.severity} variant="filled" sx={{ width: "100%" }}>
+						{toast.msg}
+					</Alert>
+				) : undefined}
+			</Snackbar>
+
+			<DesignDetailDialog open={detailOpen} id={detailId} onClose={() => setDetailOpen(false)} />
 		</Box>
 	);
 }

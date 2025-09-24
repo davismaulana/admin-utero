@@ -1,14 +1,18 @@
+// src/app/dashboard/recommendations/page.tsx
 "use client";
 
 import * as React from "react";
 import { getRecommendationsDiagnostics, recomputeRecommendations, type BillboardRow } from "@/services/billboards";
+import { listCities, listProvinces, type CityRow, type ProvinceRow } from "@/services/locations";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import {
+  Alert,
+	Autocomplete,
 	Avatar,
 	Box,
-	Button,
 	Chip,
+	CircularProgress,
 	FormControl,
 	IconButton,
 	InputLabel,
@@ -39,9 +43,6 @@ function resolveImgUrl(u?: string) {
 	}
 }
 
-/** Row type used by the grid, including nested joins returned by diagnostics */
-// …imports stay the same
-
 type BillboardGridRow = BillboardRow & {
 	city?: { name?: string | null; province?: { name?: string | null } | null } | null;
 	category?: { id?: string | null; name?: string | null } | null;
@@ -59,15 +60,24 @@ export default function RecommendationsPage() {
 	const [rowCount, setRowCount] = React.useState(0);
 	const [sortModel, setSortModel] = React.useState<GridSortModel>([{ field: "score", sort: "desc" }]);
 
-	// 🔥 dynamic category options from API
+	// Category (server-side filter, options discovered from API response)
 	const [categoryOptions, setCategoryOptions] = React.useState<Array<{ id: string; name: string }>>([]);
-
 	const [categoryId, setCategoryId] = React.useState<string>("");
-	const [province, setProvince] = React.useState<string>("");
-	const [city, setCity] = React.useState<string>("");
+
+	// Province & City (searchable dropdowns like Billboards page)
+	const [provinceInput, setProvinceInput] = React.useState("");
+	const [cityInput, setCityInput] = React.useState("");
+	const [provinceOptions, setProvinceOptions] = React.useState<ProvinceRow[]>([]);
+	const [cityOptions, setCityOptions] = React.useState<CityRow[]>([]);
+	const [provinceLoading, setProvinceLoading] = React.useState(false);
+	const [cityLoading, setCityLoading] = React.useState(false);
+	const [selectedProvince, setSelectedProvince] = React.useState<ProvinceRow | null>(null);
+	const [selectedCity, setSelectedCity] = React.useState<CityRow | null>(null);
+
+	// Text search (client-side)
 	const [search, setSearch] = React.useState("");
 
-	const [toast, setToast] = React.useState<string | null>(null);
+	const [toast, setToast] = React.useState<{ msg: string; severity: "success" | "error" } | null>(null);
 	const [detailOpen, setDetailOpen] = React.useState(false);
 	const [detailId, setDetailId] = React.useState<string | null>(null);
 	const [recomputing, setRecomputing] = React.useState(false);
@@ -78,26 +88,25 @@ export default function RecommendationsPage() {
 			const res = await getRecommendationsDiagnostics({
 				page: page + 1,
 				pageSize,
-				categoryId: categoryId || undefined, // server-side filter
-				province: province || undefined,
-				city: city || undefined,
+				categoryId: categoryId || undefined, // server-side category filter
+				province: undefined, // province/city are filtered client-side here
+				city: undefined,
 			});
 
-			// 👇 Build category options from the response (unique by id)
+			// build category options from response (stable+unique)
 			setCategoryOptions((prev) => {
 				const map = new Map<string, string>();
-				// keep any existing options so the select doesn't flicker when paging
 				for (const p of prev) map.set(p.id, p.name);
 				for (const r of res.data as BillboardGridRow[]) {
-					const id = r.category?.id;
-					const name = r.category?.name;
+					const id = r.category?.id,
+						name = r.category?.name;
 					if (id && name) map.set(id, name);
 				}
 				return Array.from(map, ([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
 			});
 
-			// Optional client-side search (on top of API filters)
-			const filtered = search
+			// quick client-side search on location/description
+			const searched = search
 				? res.data.filter(
 						(r) =>
 							r.location?.toLowerCase().includes(search.toLowerCase()) ||
@@ -105,19 +114,69 @@ export default function RecommendationsPage() {
 					)
 				: res.data;
 
-			setRows(filtered as BillboardGridRow[]);
-			const total = res.meta?.total ?? filtered.length;
+			setRows(searched as BillboardGridRow[]);
+			const total = res.meta?.total ?? searched.length;
 			setRowCount(total);
 		} catch (e: any) {
 			setToast(e?.message ?? "Failed to load recommendations");
 		} finally {
 			setLoading(false);
 		}
-	}, [page, pageSize, categoryId, province, city, search]);
+	}, [page, pageSize, categoryId, search]);
 
 	React.useEffect(() => {
 		fetchData().catch(console.error);
 	}, [fetchData]);
+
+	// --- Province/City dropdown loaders (like Billboards page)
+	const loadProvinces = React.useCallback(async (term: string) => {
+		setProvinceLoading(true);
+		try {
+			const res = await listProvinces({ search: term || undefined, pageSize: 20 });
+			setProvinceOptions(res.data);
+		} finally {
+			setProvinceLoading(false);
+		}
+	}, []);
+	const loadCities = React.useCallback(async (term: string, provinceId?: string) => {
+		setCityLoading(true);
+		try {
+			const res = await listCities({ search: term || undefined, pageSize: 20, provinceId });
+			setCityOptions(res.data);
+		} finally {
+			setCityLoading(false);
+		}
+	}, []);
+
+	// initial fills
+	React.useEffect(() => {
+		loadProvinces("");
+	}, [loadProvinces]);
+	React.useEffect(() => {
+		loadCities("", selectedProvince?.id);
+	}, [loadCities, selectedProvince?.id]);
+
+	// client-side province/city filtering over rows
+	const displayedRows = React.useMemo(() => {
+		if (!selectedProvince && !selectedCity) return rows;
+
+		return rows.filter((r) => {
+			const cityName = r.city?.name ?? r.cityName ?? "";
+			const provName = r.city?.province?.name ?? r.provinceName ?? "";
+			const cityOk = selectedCity ? cityName === selectedCity.name : true;
+			const provOk = selectedProvince ? provName === selectedProvince.name : true;
+			return cityOk && provOk;
+		});
+	}, [rows, selectedProvince, selectedCity]);
+
+	// Debounce server fetch on text search (no Apply button)
+	React.useEffect(() => {
+		const t = setTimeout(() => {
+			setPage(0);
+			fetchData().catch(console.error);
+		}, 300);
+		return () => clearTimeout(t);
+	}, [search, fetchData]);
 
 	const columns: GridColDef<BillboardGridRow>[] = [
 		{
@@ -259,20 +318,15 @@ export default function RecommendationsPage() {
 				</Stack>
 
 				<Stack direction="row" spacing={1} alignItems="center" sx={{ flexWrap: "wrap" }}>
+					{/* Live text search (debounced) */}
 					<TextField
 						size="small"
 						placeholder="Search location/description"
 						value={search}
 						onChange={(e) => setSearch(e.target.value)}
-						onKeyDown={(e) => {
-							if (e.key === "Enter") {
-								setPage(0);
-								fetchData();
-							}
-						}}
 					/>
 
-					{/* 🔥 Category options from API */}
+					{/* Category (server-side) */}
 					<FormControl size="small" sx={{ minWidth: 180 }}>
 						<InputLabel id="cat-label">Category</InputLabel>
 						<Select
@@ -293,68 +347,101 @@ export default function RecommendationsPage() {
 						</Select>
 					</FormControl>
 
-					<TextField
+					{/* Province Autocomplete (with search) */}
+					<Autocomplete
+						sx={{ minWidth: 220 }}
 						size="small"
-						label="Province"
-						placeholder="e.g. DKI JAKARTA"
-						value={province}
-						onChange={(e) => setProvince(e.target.value)}
-						onKeyDown={(e) => {
-							if (e.key === "Enter") {
-								setPage(0);
-								fetchData();
-							}
+						options={provinceOptions}
+						getOptionLabel={(o) => o.name || ""}
+						value={selectedProvince}
+						onChange={(_e, v) => {
+							setSelectedProvince(v);
+							setSelectedCity(null);
+							loadCities(cityInput, v?.id);
 						}}
-					/>
-					<TextField
-						size="small"
-						label="City"
-						placeholder="e.g. KOTA BOGOR"
-						value={city}
-						onChange={(e) => setCity(e.target.value)}
-						onKeyDown={(e) => {
-							if (e.key === "Enter") {
-								setPage(0);
-								fetchData();
-							}
+						inputValue={provinceInput}
+						onInputChange={(_e, v) => {
+							setProvinceInput(v);
+							loadProvinces(v);
 						}}
+						loading={provinceLoading}
+						renderInput={(params) => (
+							<TextField
+								{...params}
+								label="Province"
+								InputProps={{
+									...params.InputProps,
+									endAdornment: (
+										<>
+											{provinceLoading ? <CircularProgress size={18} /> : null}
+											{params.InputProps.endAdornment}
+										</>
+									),
+								}}
+							/>
+						)}
 					/>
 
-					<Button
-						variant="contained"
-						onClick={() => {
-							setPage(0);
-							fetchData();
+					{/* City Autocomplete (scoped by province when selected) */}
+					<Autocomplete
+						sx={{ minWidth: 220 }}
+						size="small"
+						options={cityOptions}
+						getOptionLabel={(o) => o.name || ""}
+						value={selectedCity}
+						onChange={(_e, v) => setSelectedCity(v)}
+						inputValue={cityInput}
+						onInputChange={(_e, v) => {
+							setCityInput(v);
+							loadCities(v, selectedProvince?.id);
 						}}
-					>
-						Apply
-					</Button>
+						loading={cityLoading}
+						renderInput={(params) => (
+							<TextField
+								{...params}
+								label="City"
+								InputProps={{
+									...params.InputProps,
+									endAdornment: (
+										<>
+											{cityLoading ? <CircularProgress size={18} /> : null}
+											{params.InputProps.endAdornment}
+										</>
+									),
+								}}
+							/>
+						)}
+					/>
 
-					<Button
-						variant="outlined"
-						startIcon={<RefreshIcon />}
-						disabled={recomputing}
-						onClick={async () => {
-							try {
-								setRecomputing(true);
-								const res = await recomputeRecommendations();
-								setToast(`Scores recomputed. Updated: ${res.updated}`);
-								await fetchData();
-							} catch (e: any) {
-								setToast(e?.message ?? "Failed to recompute");
-							} finally {
-								setRecomputing(false);
-							}
-						}}
-					>
-						Recompute
-					</Button>
+					{/* Recompute */}
+					<Tooltip title="Recompute scores">
+						<span>
+							<IconButton
+								color="primary"
+								disabled={recomputing}
+								onClick={async () => {
+									try {
+										setRecomputing(true);
+										const res = await recomputeRecommendations();
+										setToast({ msg: `Scores recomputed. Updated: ${res.updated}`, severity: "success" });
+
+										await fetchData();
+									} catch (e: any) {
+										setToast(e?.message ?? "Failed to recompute");
+									} finally {
+										setRecomputing(false);
+									}
+								}}
+							>
+								<RefreshIcon />
+							</IconButton>
+						</span>
+					</Tooltip>
 				</Stack>
 			</Stack>
-
 			<div style={{ height: 600, width: "100%" }}>
 				<DataGrid<BillboardGridRow>
-					rows={rows}
+					rows={displayedRows}
 					columns={columns}
 					getRowId={(r) => r.id}
 					loading={loading}
@@ -373,9 +460,19 @@ export default function RecommendationsPage() {
 					disableRowSelectionOnClick
 				/>
 			</div>
-
 			<BillboardDetailDialog open={detailOpen} billboardId={detailId} onClose={() => setDetailOpen(false)} />
-			<Snackbar open={!!toast} autoHideDuration={2800} onClose={() => setToast(null)} message={toast ?? ""} />
+			<Snackbar
+				open={!!toast}
+				autoHideDuration={1800}
+				onClose={() => setToast(null)}
+				anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+			>
+				{toast ? (
+					<Alert onClose={() => setToast(null)} severity={toast.severity} variant="filled" sx={{ width: "100%" }}>
+						{toast.msg}
+					</Alert>
+				) : undefined}
+			</Snackbar>{" "}
 		</Box>
 	);
 }

@@ -1,44 +1,125 @@
-'use client';
+"use client";
 
-import * as React from 'react';
-import Button from '@mui/material/Button';
-import Card from '@mui/material/Card';
-import CardActions from '@mui/material/CardActions';
-import CardContent from '@mui/material/CardContent';
-import CardHeader from '@mui/material/CardHeader';
-import Divider from '@mui/material/Divider';
-import FormControl from '@mui/material/FormControl';
-import InputLabel from '@mui/material/InputLabel';
-import OutlinedInput from '@mui/material/OutlinedInput';
-import Stack from '@mui/material/Stack';
+import * as React from "react";
+import { updateMyPassword } from "@/services/users";
+import Visibility from "@mui/icons-material/Visibility";
+import VisibilityOff from "@mui/icons-material/VisibilityOff";
+import {
+	Alert,
+	Button,
+	Card,
+	CardActions,
+	CardContent,
+	CardHeader,
+	Divider,
+	FormControl,
+	IconButton,
+	InputAdornment,
+	InputLabel,
+	OutlinedInput,
+	Snackbar,
+	Stack,
+} from "@mui/material";
 
 export function UpdatePasswordForm(): React.JSX.Element {
-  return (
-    <form
-      onSubmit={(event) => {
-        event.preventDefault();
-      }}
-    >
-      <Card>
-        <CardHeader subheader="Update password" title="Password" />
-        <Divider />
-        <CardContent>
-          <Stack spacing={3} sx={{ maxWidth: 'sm' }}>
-            <FormControl fullWidth>
-              <InputLabel>Password</InputLabel>
-              <OutlinedInput label="Password" name="password" type="password" />
-            </FormControl>
-            <FormControl fullWidth>
-              <InputLabel>Confirm password</InputLabel>
-              <OutlinedInput label="Confirm password" name="confirmPassword" type="password" />
-            </FormControl>
-          </Stack>
-        </CardContent>
-        <Divider />
-        <CardActions sx={{ justifyContent: 'flex-end' }}>
-          <Button variant="contained">Update</Button>
-        </CardActions>
-      </Card>
-    </form>
-  );
+	const [password, setPassword] = React.useState("");
+	const [confirmPassword, setConfirmPassword] = React.useState("");
+	const [showPassword, setShowPassword] = React.useState(false);
+	const [showConfirm, setShowConfirm] = React.useState(false);
+	const [submitting, setSubmitting] = React.useState(false);
+	const [toast, setToast] = React.useState<{ msg: string; severity: "success" | "error" } | null>(null);
+
+	const canSubmit = password.length >= 6 && password === confirmPassword && !submitting;
+
+	async function onSubmit(e: React.FormEvent) {
+		e.preventDefault();
+		if (!canSubmit) return;
+		try {
+			setSubmitting(true);
+			await updateMyPassword({ password, confirmPassword });
+			setToast({ msg: "Password updated", severity: "success" });
+			setPassword("");
+			setConfirmPassword("");
+		} catch (err: any) {
+			setToast(err?.message || "Failed to update password");
+		} finally {
+			setSubmitting(false);
+		}
+	}
+
+	return (
+		<>
+			<form onSubmit={onSubmit}>
+				<Card>
+					<CardHeader subheader="Update password" title="Password" />
+					<Divider />
+					<CardContent>
+						<Stack spacing={3} sx={{ maxWidth: "sm" }}>
+							<FormControl fullWidth>
+								<InputLabel htmlFor="new-password">Password</InputLabel>
+								<OutlinedInput
+									id="new-password"
+									label="Password"
+									type={showPassword ? "text" : "password"}
+									value={password}
+									onChange={(e) => setPassword(e.target.value)}
+									endAdornment={
+										<InputAdornment position="end">
+											<IconButton
+												aria-label="toggle password visibility"
+												onClick={() => setShowPassword((s) => !s)}
+												edge="end"
+											>
+												{showPassword ? <VisibilityOff /> : <Visibility />}
+											</IconButton>
+										</InputAdornment>
+									}
+								/>
+							</FormControl>
+
+							<FormControl fullWidth>
+								<InputLabel htmlFor="confirm-password">Confirm password</InputLabel>
+								<OutlinedInput
+									id="confirm-password"
+									label="Confirm password"
+									type={showConfirm ? "text" : "password"}
+									value={confirmPassword}
+									onChange={(e) => setConfirmPassword(e.target.value)}
+									endAdornment={
+										<InputAdornment position="end">
+											<IconButton
+												aria-label="toggle confirm password visibility"
+												onClick={() => setShowConfirm((s) => !s)}
+												edge="end"
+											>
+												{showConfirm ? <VisibilityOff /> : <Visibility />}
+											</IconButton>
+										</InputAdornment>
+									}
+								/>
+							</FormControl>
+						</Stack>
+					</CardContent>
+					<Divider />
+					<CardActions sx={{ justifyContent: "flex-end" }}>
+						<Button type="submit" variant="contained" disabled={!canSubmit}>
+							{submitting ? "Updating…" : "Update"}
+						</Button>
+					</CardActions>
+				</Card>
+				<Snackbar
+					open={!!toast}
+					autoHideDuration={2600}
+					onClose={() => setToast(null)}
+					anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+				>
+					{toast ? (
+						<Alert onClose={() => setToast(null)} severity={toast.severity} variant="filled" sx={{ width: "100%" }}>
+							{toast.msg}
+						</Alert>
+					) : undefined}
+				</Snackbar>
+			</form>
+		</>
+	);
 }

@@ -56,6 +56,32 @@ export async function listDesigns(params: {
   return data;
 }
 
+// ---------- Detail ----------
+type DesignDetailResponse = {
+  status: boolean;
+  message: string;
+  data: DesignRow; // backend returns the design with images
+};
+
+export async function getDesignDetail(id: string): Promise<DesignRow> {
+  const { data } = await api.get<DesignDetailResponse>(`/design/${id}`);
+  return data.data;
+}
+
+// ---------- Formatters ----------
+export const idrFmt = new Intl.NumberFormat("id-ID", {
+  style: "currency",
+  currency: "IDR",
+  maximumFractionDigits: 0,
+});
+
+export function toIDRNumber(v?: string | number | null): number | undefined {
+  if (v == null || v === "") return undefined;
+  if (typeof v === "number") return Number.isFinite(v) ? v : undefined;
+  const n = Number(String(v).replace(/[^\d]/g, ""));
+  return Number.isFinite(n) ? n : undefined;
+}
+
 export type CreateDesignInput = {
   name: string;
   description: string;

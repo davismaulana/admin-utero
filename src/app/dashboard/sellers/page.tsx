@@ -6,7 +6,7 @@ import { listSellers, type SellerRow } from "@/services/sellers";
 import { deleteUser, type UserRow } from "@/services/users"; // keep if you still delete via user API
 import DeleteIcon from "@mui/icons-material/Delete";
 import VisibilityIcon from "@mui/icons-material/Visibility";
-import { Avatar, Box, Button, Chip, IconButton, Snackbar, Stack, TextField, Tooltip, Typography } from "@mui/material";
+import { Alert, Avatar, Box, Button, Chip, IconButton, Snackbar, Stack, TextField, Tooltip, Typography } from "@mui/material";
 import { DataGrid, GridColDef, GridSortModel } from "@mui/x-data-grid";
 
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
@@ -34,7 +34,7 @@ export default function SellersPage() {
 	const [totalCount, setTotalCount] = React.useState(0);
 	const [search, setSearch] = React.useState("");
 	const [sortModel, setSortModel] = React.useState<GridSortModel>([{ field: "createdAt", sort: "desc" }]);
-	const [toast, setToast] = React.useState<string | null>(null);
+	const [toast, setToast] = React.useState<{ msg: string; severity: "success" | "error" } | null>(null);
 
 	const [confirmOpen, setConfirmOpen] = React.useState(false);
 	const [toDelete, setToDelete] = React.useState<SellerRow | null>(null);
@@ -167,7 +167,6 @@ export default function SellersPage() {
 					</Button>
 				</Stack>
 			</Stack>
-
 			<div style={{ height: 600, width: "100%" }}>
 				<DataGrid
 					rows={rows}
@@ -189,9 +188,7 @@ export default function SellersPage() {
 					disableRowSelectionOnClick
 				/>
 			</div>
-
 			<SellerDetailDialog open={detailOpen} sellerId={detailId} onClose={() => setDetailOpen(false)} />
-
 			{/* Delete */}
 			<ConfirmDialog
 				open={confirmOpen}
@@ -200,7 +197,7 @@ export default function SellersPage() {
 					if (toDelete) {
 						// If you have a /seller delete endpoint, switch this to deleteMerchant(toDelete.id)
 						await deleteUser(toDelete.userId || toDelete.id); // deleting the underlying user (current flow)
-						setToast("Seller deleted");
+						setToast({ msg: "Seller deleted", severity: "success" });
 						setConfirmOpen(false);
 						setToDelete(null);
 						await fetchData();
@@ -209,8 +206,18 @@ export default function SellersPage() {
 				title="Delete seller"
 				content={`Delete ${toDelete?.fullname ?? "this seller"}? This cannot be undone.`}
 			/>
-
-			<Snackbar open={!!toast} autoHideDuration={2500} onClose={() => setToast(null)} message={toast ?? ""} />
+			<Snackbar
+				open={!!toast}
+				autoHideDuration={1800}
+				onClose={() => setToast(null)}
+				anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+			>
+				{toast ? (
+					<Alert onClose={() => setToast(null)} severity={toast.severity} variant="filled" sx={{ width: "100%" }}>
+						{toast.msg}
+					</Alert>
+				) : undefined}
+			</Snackbar>{" "}
 		</Box>
 	);
 }

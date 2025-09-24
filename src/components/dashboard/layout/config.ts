@@ -13,7 +13,12 @@ export const navItems = [
   { key: 'designs', title: 'Designs', href: paths.dashboard.designs, icon: 'paint-brush' },
   { key: "billboards", title: "Billboards", href: paths.dashboard.billboards, icon: "signpost" },
   { key: 'recommendations', title: 'Recommendations', href: paths.dashboard.recommendations, icon: 'sparkles' },
-  
+  { key: "locations", title: "Locations", href: paths.dashboard.locations, icon: "map-pin" },
+  { key: 'transactions', title: 'Transactions', href: paths.dashboard.transactions, icon: 'file-text' },
+
+  { key: 'recycleBin', title: 'Recycle Bin', href: paths.dashboard.recycleBin, icon: 'recycle-bin' },
+  { key: 'gelleries', title: 'Galleries', href: paths.dashboard.galleries, icon: 'galleries' },
+
   // { key: 'customers', title: 'Customers', href: paths.dashboard.customers, icon: 'users' },
   // { key: 'integrations', title: 'Integrations', href: paths.dashboard.integrations, icon: 'plugs-connected' },
   // { key: 'settings', title: 'Settings', href: paths.dashboard.settings, icon: 'gear-six' },

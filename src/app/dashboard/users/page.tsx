@@ -2,14 +2,21 @@
 "use client";
 
 import * as React from "react";
-import { createUser, deleteUser, listUsers, updateUser, type UserRow } from "@/services/users";
+import {
+	createUser,
+	deleteUser,
+	listUsers,
+	updateUser, // ⬅️ add this
+	type UserRow,
+} from "@/services/users";
 import DeleteIcon from "@mui/icons-material/Delete";
 import EditIcon from "@mui/icons-material/Edit";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import { Avatar, Box, Button, Chip, IconButton, Snackbar, Stack, TextField, Tooltip, Typography } from "@mui/material";
-import { DataGrid, GridColDef, GridSortModel } from "@mui/x-data-grid";
+import { DataGrid, type GridColDef, type GridRenderCellParams, type GridSortModel } from "@mui/x-data-grid";
 
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
+import { UserDetailDialog } from "@/components/dashboard/users/user-detail-dialog";
 import { UserFormDialog } from "@/components/dashboard/users/user-form-dialog";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ?? "";
@@ -33,10 +40,10 @@ export default function UsersPage() {
 	const [confirmOpen, setConfirmOpen] = React.useState(false);
 	const [toDelete, setToDelete] = React.useState<UserRow | null>(null);
 
-	const fmt = new Intl.DateTimeFormat("id-ID", {
-		dateStyle: "medium",
-		timeStyle: "short",
-	});
+	const [detailOpen, setDetailOpen] = React.useState(false);
+	const [detailId, setDetailId] = React.useState<string | null>(null);
+
+	const fmt = new Intl.DateTimeFormat("id-ID", { dateStyle: "medium", timeStyle: "short" });
 
 	const fetchData = React.useCallback(async () => {
 		setLoading(true);
@@ -66,8 +73,8 @@ export default function UsersPage() {
 			width: 80,
 			sortable: false,
 			filterable: false,
-			renderCell: (params) => {
-				const src = params.value ? `${API_BASE}/${String(params.value)}` : undefined;
+			renderCell: (params: GridRenderCellParams<UserRow>) => {
+				const src = params.value ? `${API_BASE}/${String(params.value).replace(/^\/+/, "")}` : undefined;
 				const initial = (params.row.username?.[0] ?? params.row.email?.[0] ?? "U").toUpperCase();
 				return <Avatar src={src}>{initial}</Avatar>;
 			},
@@ -76,12 +83,14 @@ export default function UsersPage() {
 		{ field: "email", headerName: "Email", flex: 1, minWidth: 220 },
 		{ field: "phone", headerName: "Phone", minWidth: 140 },
 		{ field: "level", headerName: "Level", minWidth: 120 },
+		{ field: "provider", headerName: "Provider", minWidth: 130 },
 		{
 			field: "createdAt",
 			headerName: "Created",
 			minWidth: 180,
-			valueFormatter: (p) => {
-				const d = new Date(String(p));
+			// valueFormatter previously used "p" directly; use row or p.value safely.
+			renderCell: (p: GridRenderCellParams<UserRow>) => {
+				const d = new Date(String(p.row.createdAt));
 				return isNaN(d.getTime()) ? "" : fmt.format(d);
 			},
 		},
@@ -91,13 +100,17 @@ export default function UsersPage() {
 			width: 140,
 			sortable: false,
 			filterable: false,
-			renderCell: (params) => (
+			renderCell: (params: GridRenderCellParams<UserRow>) => (
 				<Stack direction="row" spacing={1}>
-					<Tooltip title="View">
-						<IconButton size="small" onClick={() => alert(JSON.stringify(params.row, null, 2))}>
-							<VisibilityIcon fontSize="small" />
-						</IconButton>
-					</Tooltip>
+					<IconButton
+						size="small"
+						onClick={() => {
+							setDetailId(params.row.id);
+							setDetailOpen(true);
+						}}
+					>
+						<VisibilityIcon fontSize="small" />
+					</IconButton>
 					<Tooltip title="Edit">
 						<IconButton
 							size="small"
@@ -170,7 +183,7 @@ export default function UsersPage() {
 			</Stack>
 
 			<div style={{ height: 600, width: "100%" }}>
-				<DataGrid
+				<DataGrid<UserRow>
 					rows={rows}
 					columns={columns}
 					getRowId={(r) => r.id}
@@ -191,7 +204,7 @@ export default function UsersPage() {
 				/>
 			</div>
 
-			{/* Create / Edit */}
+			{/* Create / Edit (single form) */}
 			<UserFormDialog
 				open={formOpen}
 				mode={formMode}
@@ -201,7 +214,7 @@ export default function UsersPage() {
 								username: editing.username,
 								email: editing.email,
 								phone: editing.phone ?? "",
-								level: editing.level,
+								level: editing.level as any, // form supports ADMIN | BUYER | MERCHANT guarding inside
 							}
 						: undefined
 				}
@@ -212,7 +225,7 @@ export default function UsersPage() {
 							username: vals.username,
 							email: vals.email,
 							phone: vals.phone,
-							level: vals.level,
+							level: vals.level as any,
 							password: vals.password || "",
 							confirmPassword: vals.confirmPassword || "",
 						});
@@ -222,9 +235,9 @@ export default function UsersPage() {
 							username: vals.username,
 							email: vals.email,
 							phone: vals.phone,
-							level: vals.level,
-							password: vals.password,
-							confirmPassword: vals.confirmPassword,
+							level: vals.level as any,
+							password: vals.password, // optional
+							confirmPassword: vals.confirmPassword, // may be undefined if left blank
 						});
 						setToast("User updated");
 					}
@@ -251,6 +264,7 @@ export default function UsersPage() {
 			/>
 
 			<Snackbar open={!!toast} autoHideDuration={2500} onClose={() => setToast(null)} message={toast ?? ""} />
+			<UserDetailDialog open={detailOpen} id={detailId} onClose={() => setDetailOpen(false)} />
 		</Box>
 	);
 }

@@ -11,11 +11,12 @@ import {
 import DeleteIcon from "@mui/icons-material/Delete";
 import EditIcon from "@mui/icons-material/Edit";
 import VisibilityIcon from "@mui/icons-material/Visibility";
-import { Box, Button, Chip, IconButton, Snackbar, Stack, TextField, Tooltip, Typography } from "@mui/material";
+import { Alert, Box, Button, Chip, IconButton, Snackbar, Stack, TextField, Tooltip, Typography } from "@mui/material";
 import { DataGrid, GridColDef, GridSortModel } from "@mui/x-data-grid";
 
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
 import { CategoryFormDialog } from "@/components/dashboard/categories/category-form-dialog";
+import { CategoryDetailDialog } from "@/components/dashboard/categories/category-detail-dialog";
 
 export default function CategoriesPage() {
 	const [rows, setRows] = React.useState<CategoryRow[]>([]);
@@ -27,7 +28,7 @@ export default function CategoriesPage() {
 	const [search, setSearch] = React.useState("");
 	// sorting optional — backend contract didn't specify sorting, so keep client-only
 	const [sortModel, setSortModel] = React.useState<GridSortModel>([{ field: "createdAt", sort: "desc" }]);
-	const [toast, setToast] = React.useState<string | null>(null);
+	const [toast, setToast] = React.useState<{ msg: string; severity: "success" | "error" } | null>(null);
 
 	// dialogs
 	const [formOpen, setFormOpen] = React.useState(false);
@@ -37,6 +38,9 @@ export default function CategoriesPage() {
 
 	const [confirmOpen, setConfirmOpen] = React.useState(false);
 	const [toDelete, setToDelete] = React.useState<CategoryRow | null>(null);
+
+	const [detailOpen, setDetailOpen] = React.useState(false);
+	const [detailId, setDetailId] = React.useState<string | null>(null);
 
 	const fmt = new Intl.DateTimeFormat("id-ID", {
 		dateStyle: "medium",
@@ -61,8 +65,27 @@ export default function CategoriesPage() {
 		fetchData().catch(console.error);
 	}, [fetchData]);
 
+	React.useEffect(() => {
+		(async () => {
+			setLoading(true);
+			try {
+				const res = await listCategories({ page: page + 1, pageSize });
+				setRows(res.data);
+				setRowCount(res.meta?.total ?? res.data.length);
+			} finally {
+				setLoading(false);
+			}
+		})();
+	}, [page, pageSize]);
+
 	const columns: GridColDef<CategoryRow>[] = [
 		{ field: "name", headerName: "Name", flex: 1, minWidth: 220 },
+		{
+			field: "billboardCount",
+			headerName: "Billboards",
+			minWidth: 120,
+			valueGetter: (_v, row) => row.billboardCount ?? row.billboards?.length ?? 0,
+		},
 		{
 			field: "createdAt",
 			headerName: "Created",
@@ -90,7 +113,13 @@ export default function CategoriesPage() {
 			renderCell: (params) => (
 				<Stack direction="row" spacing={1}>
 					<Tooltip title="View">
-						<IconButton size="small" onClick={() => alert(JSON.stringify(params.row, null, 2))}>
+						<IconButton
+							size="small"
+							onClick={() => {
+								setDetailId(params.row.id);
+								setDetailOpen(true);
+							}}
+						>
 							<VisibilityIcon fontSize="small" />
 						</IconButton>
 					</Tooltip>
@@ -165,7 +194,6 @@ export default function CategoriesPage() {
 					</Button>
 				</Stack>
 			</Stack>
-
 			<div style={{ height: 600, width: "100%" }}>
 				<DataGrid
 					rows={rows}
@@ -188,7 +216,6 @@ export default function CategoriesPage() {
 					disableRowSelectionOnClick
 				/>
 			</div>
-
 			{/* Create / Edit */}
 			<CategoryFormDialog
 				open={formOpen}
@@ -201,10 +228,10 @@ export default function CategoriesPage() {
 						setFormError(null);
 						if (formMode === "create") {
 							await createCategory({ name: vals.name.trim() });
-							setToast("Category created");
+							setToast({ msg: "Category created", severity: "success" });
 						} else if (editing) {
 							await updateCategory(editing.id, { name: vals.name.trim() });
-							setToast("Category updated");
+							setToast({ msg: "Category updated", severity: "success" });
 						}
 						setFormOpen(false);
 						await fetchData();
@@ -213,7 +240,6 @@ export default function CategoriesPage() {
 					}
 				}}
 			/>
-
 			{/* Delete */}
 			<ConfirmDialog
 				open={confirmOpen}
@@ -221,7 +247,7 @@ export default function CategoriesPage() {
 				onConfirm={async () => {
 					if (toDelete) {
 						await deleteCategory(toDelete.id);
-						setToast("Category deleted");
+						setToast({ msg: "Category deleted", severity: "success" });
 						setConfirmOpen(false);
 						setToDelete(null);
 						await fetchData();
@@ -230,8 +256,19 @@ export default function CategoriesPage() {
 				title="Delete category"
 				content={`Delete ${toDelete?.name ?? "this category"}? This cannot be undone.`}
 			/>
-
-			<Snackbar open={!!toast} autoHideDuration={2500} onClose={() => setToast(null)} message={toast ?? ""} />
+			<Snackbar
+				open={!!toast}
+				autoHideDuration={1800}
+				onClose={() => setToast(null)}
+				anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+			>
+				{toast ? (
+					<Alert onClose={() => setToast(null)} severity={toast.severity} variant="filled" sx={{ width: "100%" }}>
+						{toast.msg}
+					</Alert>
+				) : undefined}
+			</Snackbar>{" "}
+			<CategoryDetailDialog open={detailOpen} id={detailId} onClose={() => setDetailOpen(false)} />
 		</Box>
 	);
 }

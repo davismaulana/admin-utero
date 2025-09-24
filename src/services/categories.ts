@@ -1,10 +1,14 @@
 import api from "@/lib/api";
+import { BillboardRow } from "./billboards";
 
 export type CategoryRow = {
     id: string;
     name: string;
     createdAt: string;
     updatedAt: string;
+
+    billboardCount?: number;
+    billboards?: BillboardRow[];
 };
 
 export type PageMeta = {
@@ -50,6 +54,15 @@ export async function createCategory(payload: { name: string }) {
             "/category",
             payload // JSON body: { name }
         );
+        return data.data;
+    } catch (e) {
+        throw new Error(extractErrorMessage(e));
+    }
+}
+
+export async function getCategoryDetail(id: string): Promise<CategoryRow> {
+    try {
+        const { data } = await api.get<{ status: boolean; message: string; data: CategoryRow }>(`/category/${id}`);
         return data.data;
     } catch (e) {
         throw new Error(extractErrorMessage(e));

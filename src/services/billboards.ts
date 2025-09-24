@@ -1,4 +1,3 @@
-// src/services/billboards.ts
 import api from "@/lib/api";
 
 export type BillboardImage = {
@@ -58,14 +57,61 @@ export type BillboardRow = {
   averageRating?: number;
 };
 
+export type RatingUser = {
+  id: string;
+  username: string;
+  profilePicture?: string | null;
+};
+
+export type RatingInfo = {
+  id: string;
+  rating: number;
+  comment?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  user?: RatingUser | null;   // ⬅️ now comes from backend
+};
+
+export type TxnSummary = {
+  id: string;
+  startDate?: string | null;
+  endDate?: string | null;
+  status?: string | null;
+  rating?: RatingInfo | null; // ⬅️ keep it optional
+};
+
+export type OwnerUser = {
+  id: string;
+  username: string;
+  email?: string | null;
+  phone?: string | null;
+  level?: string | null;
+  provider?: string | null;
+  profilePicture?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
 export type PageMeta = { page: number; pageSize: number; total: number; pages: number };
 export type ListResponse<T> = { status?: boolean; message?: string; data: T[]; meta?: PageMeta };
 
 export type BillboardDetail = BillboardRow & {
-  transaction?: any[]; // keep loose for now (you can type later)
+  owner?: {
+    id: string;
+    fullname: string;
+    companyName: string;
+    user?: OwnerUser | null;
+  } | null;
+  transaction?: TxnSummary[];
+  ownerUser?: OwnerUser | null;
 };
 
-export type DetailResponse = { status: boolean; message: string; data: BillboardDetail; averageRating?: number };
+type BillboardDetailResponse = {
+  status: boolean;
+  message: string;
+  data: BillboardDetail;
+  averageRating?: number;
+};
 
 function extractErrorMessage(e: any): string {
   const d = e?.response?.data;
@@ -127,9 +173,9 @@ export async function listMyBillboards(params: { page?: number; pageSize?: numbe
 }
 
 // ---------- Detail ----------
-export async function getBillboardDetail(id: string) {
-  const { data } = await api.get<DetailResponse>(`/billboard/detail/${id}`);
-  return data; // keep averageRating available to caller
+export async function getBillboardDetail(id: string): Promise<BillboardDetail> {
+  const { data } = await api.get<BillboardDetailResponse>(`/billboard/detail/${id}`);
+  return data.data; // <-- return just the inner object
 }
 
 // ---------- Create / Update ----------
@@ -139,28 +185,46 @@ export type CreateBillboardInput = {
   location: string;
   cityId: string;
   provinceId: string;
-  status: string;
-  mode: string;
+
+  status: "Available" | "Unavailable" | string; // backend enum BillboardStatus
+  mode: "Buy" | "Rent" | string;                // backend enum BillboardMode
   size: string;
-  orientation: string;
-  display: string;
-  lighting: string;
-  tax: string;
-  landOwnership?: string;
+  orientation: string;                           // Orientation
+  display: string;                               // DisplayType
+  lighting: string;                              // LightingType
+  tax: string;                                   // TaxType
+  landOwnership: string;                         // LandType
+
   rentPrice?: string | number;
   sellPrice?: string | number;
-  servicePrice?: string | number;
+  servicePrice: string | number;
+
+  // Thumbnail
+  imageId?: string;
+
+  // Google maps metadata
+  gPlaceId?: string;
+  formattedAddress?: string;
+  latitude?: number | string;
+  longitude?: number | string;
+  addressComponents?: unknown;
+  mapViewport?: unknown;
+
+  // files (multiple)
   images?: File[];
 };
 
 export async function createBillboard(input: CreateBillboardInput) {
   try {
     const fd = new FormData();
+
+    // required strings/enums
     fdSet(fd, "categoryId", input.categoryId);
     fdSet(fd, "description", input.description);
     fdSet(fd, "location", input.location);
     fdSet(fd, "cityId", input.cityId);
     fdSet(fd, "provinceId", input.provinceId);
+
     fdSet(fd, "status", input.status);
     fdSet(fd, "mode", input.mode);
     fdSet(fd, "size", input.size);
@@ -170,6 +234,7 @@ export async function createBillboard(input: CreateBillboardInput) {
     fdSet(fd, "tax", input.tax);
     fdSet(fd, "landOwnership", input.landOwnership);
 
+    // numbers — send as real numbers, not formatted strings
     const rent = toIDRNumber(input.rentPrice);
     const sell = toIDRNumber(input.sellPrice);
     const service = toIDRNumber(input.servicePrice);
@@ -177,12 +242,32 @@ export async function createBillboard(input: CreateBillboardInput) {
     if (sell !== undefined) fdSet(fd, "sellPrice", sell);
     if (service !== undefined) fdSet(fd, "servicePrice", service);
 
+    // optional cover image by id
+    fdSet(fd, "imageId", input.imageId);
+
+    // maps metadata
+    fdSet(fd, "gPlaceId", input.gPlaceId);
+    fdSet(fd, "formattedAddress", input.formattedAddress);
+
+    // lat/lng (DTO expects numbers; backend uses class-transformer Type => Number)
+    const lat = input.latitude === "" ? undefined : Number(input.latitude as any);
+    const lng = input.longitude === "" ? undefined : Number(input.longitude as any);
+    if (!Number.isNaN(lat as number)) fdSet(fd, "latitude", lat);
+    if (!Number.isNaN(lng as number)) fdSet(fd, "longitude", lng);
+
+    // blobs (JSON)
+    if (input.addressComponents !== undefined) fdSet(fd, "addressComponents", input.addressComponents);
+    if (input.mapViewport !== undefined) fdSet(fd, "mapViewport", input.mapViewport);
+
+    // files
     input.images?.forEach((f) => fd.append("images", f));
 
-    const res = await api.post<{ status: boolean; message: string; data: BillboardDetail }>("/billboard", fd, {
-      headers: { "Content-Type": "multipart/form-data" },
-    });
-    return res.data.data;
+    const { data } = await api.post<{ status: boolean; message: string; data: any }>(
+      "/billboard",
+      fd,
+      { headers: { "Content-Type": "multipart/form-data" } }
+    );
+    return data.data;
   } catch (e) {
     throw new Error(extractErrorMessage(e));
   }
