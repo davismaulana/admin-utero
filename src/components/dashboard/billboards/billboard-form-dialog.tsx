@@ -1,8 +1,7 @@
-// src/components/dashboard/billboards/billboard-form-dialog.tsx
 "use client";
 
 import * as React from "react";
-import { createBillboard, type CreateBillboardInput } from "@/services/billboards";
+import { createBillboard, updateBillboard, type CreateBillboardInput } from "@/services/billboards";
 import { listCities, listProvinces, type CityRow, type ProvinceRow } from "@/services/locations";
 import {
 	Alert,
@@ -23,8 +22,9 @@ import {
 import Autocomplete from "@mui/material/Autocomplete";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ?? "";
+const FILES_BASE = (process.env.NEXT_PUBLIC_FILES_BASE_URL ?? API_BASE).replace(/\/$/, "");
 
-// ---------- Option constants ----------
+// ---------- Options ----------
 const STATUS_OPTS = ["Available", "NotAvailable"] as const;
 const MODE_OPTS = ["Buy", "Rent"] as const;
 
@@ -71,66 +71,123 @@ async function fetchCategories(term = ""): Promise<CategoryRow[]> {
 type Mode = (typeof MODE_OPTS)[number];
 type Status = (typeof STATUS_OPTS)[number];
 
-export function AddBillboardDialog({
+export type BillboardInitial = Partial<{
+	id: string;
+	category: { id: string; name: string } | null;
+	categoryId: string;
+	city: { id: string; name: string } | null;
+	cityId: string;
+	province: { id: string; name: string } | null;
+	provinceId: string;
+
+	mode: Mode;
+	status: Status;
+	size: string;
+	orientation: string;
+	display: string;
+	lighting: string;
+	tax: string;
+	landOwnership: string;
+
+	location: string;
+	description: string;
+
+	rentPrice?: number | string | null;
+	sellPrice?: number | string | null;
+	servicePrice: number | string;
+
+	images?: { id: string; url: string }[];
+}>;
+
+export function BillboardFormDialog({
 	open,
+	mode: formMode, // "create" | "edit"
+	billboardId,
+	initial,
 	onClose,
-	onCreated,
+	onSaved,
 }: {
 	open: boolean;
+	mode: "create" | "edit";
+	billboardId?: string;
+	initial?: BillboardInitial | null;
 	onClose: () => void;
-	onCreated?: () => void;
+	onSaved?: () => void;
 }) {
 	// ---- state ----
-	const [mode, setMode] = React.useState<Mode>("Buy");
-	const [status, setStatus] = React.useState<Status>("Available");
-	const [size, setSize] = React.useState("");
+	const [mode, setMode] = React.useState<Mode>(initial?.mode ?? "Buy");
+	const [status, setStatus] = React.useState<Status>(initial?.status ?? "Available");
+	const [size, setSize] = React.useState(initial?.size ?? "");
+	const [orientation, setOrientation] = React.useState(initial?.orientation ?? "");
+	const [display, setDisplay] = React.useState(initial?.display ?? "");
+	const [lighting, setLighting] = React.useState(initial?.lighting ?? "");
+	const [tax, setTax] = React.useState(initial?.tax ?? "");
+	const [landOwnership, setLandOwnership] = React.useState(initial?.landOwnership ?? "");
+	const [location, setLocation] = React.useState(initial?.location ?? "");
+	const [description, setDescription] = React.useState(initial?.description ?? "");
+	const [rentPrice, setRentPrice] = React.useState(String(initial?.rentPrice ?? ""));
+	const [sellPrice, setSellPrice] = React.useState(String(initial?.sellPrice ?? ""));
+	const [servicePrice, setServicePrice] = React.useState(String(initial?.servicePrice ?? ""));
 
-	// enums (store string codes)
-	const [orientation, setOrientation] = React.useState<string>("");
-	const [display, setDisplay] = React.useState<string>("");
-	const [lighting, setLighting] = React.useState<string>("");
-	const [tax, setTax] = React.useState<string>("");
-	const [landOwnership, setLandOwnership] = React.useState<string>("");
-
-	const [location, setLocation] = React.useState("");
-	const [description, setDescription] = React.useState("");
-	const [rentPrice, setRentPrice] = React.useState<string>("");
-	const [sellPrice, setSellPrice] = React.useState<string>("");
-	const [servicePrice, setServicePrice] = React.useState<string>("");
-
-	// dropdowns with search
+	// dropdowns
 	const [catOptions, setCatOptions] = React.useState<CategoryRow[]>([]);
 	const [catLoading, setCatLoading] = React.useState(false);
 	const [catInput, setCatInput] = React.useState("");
-	const [selectedCategory, setSelectedCategory] = React.useState<CategoryRow | null>(null);
+	const [selectedCategory, setSelectedCategory] = React.useState<CategoryRow | null>(
+		initial?.category ?? (initial?.categoryId ? { id: initial.categoryId, name: "" } : null)
+	);
 
 	const [provOptions, setProvOptions] = React.useState<ProvinceRow[]>([]);
 	const [provLoading, setProvLoading] = React.useState(false);
 	const [provInput, setProvInput] = React.useState("");
-	const [selectedProvince, setSelectedProvince] = React.useState<ProvinceRow | null>(null);
+	const [selectedProvince, setSelectedProvince] = React.useState<ProvinceRow | null>(
+		initial?.province ?? (initial?.provinceId ? ({ id: initial.provinceId, name: "" } as any) : null)
+	);
 
 	const [cityOptions, setCityOptions] = React.useState<CityRow[]>([]);
 	const [cityLoading, setCityLoading] = React.useState(false);
 	const [cityInput, setCityInput] = React.useState("");
-	const [selectedCity, setSelectedCity] = React.useState<CityRow | null>(null);
+	const [selectedCity, setSelectedCity] = React.useState<CityRow | null>(
+		initial?.city ?? (initial?.cityId ? ({ id: initial.cityId, name: "" } as any) : null)
+	);
 
 	const [error, setError] = React.useState<string | null>(null);
 	const [saving, setSaving] = React.useState(false);
 
-	// images
-	const [images, setImages] = React.useState<File[]>([]);
+	// image state
+	const [existingUrls, setExistingUrls] = React.useState<string[]>([]);
+	const [newFiles, setNewFiles] = React.useState<File[]>([]);
 	const [previews, setPreviews] = React.useState<string[]>([]);
-	React.useEffect(() => {
-		if (!images.length) return setPreviews([]);
-		const urls = images.map((f) => URL.createObjectURL(f));
-		setPreviews(urls);
-		return () => urls.forEach((u) => URL.revokeObjectURL(u));
-	}, [images]);
+
+	// --- Helpers ---
+	function resolveImgUrl(u?: string | null) {
+		if (!u) return "";
+		if (/^(https?:|blob:|data:)/i.test(u)) return u;
+		const clean = String(u).replace(/^\/+/, "");
+		const base = clean.startsWith("uploads/") ? FILES_BASE : API_BASE;
+		try {
+			return new URL(clean, base + "/").href;
+		} catch {
+			return "";
+		}
+	}
 
 	const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
 		const files = e.target.files ? Array.from(e.target.files) : [];
-		if (files.length) setImages((prev) => [...prev, ...files]);
+		if (files.length) setNewFiles((prev) => [...prev, ...files]);
+		e.currentTarget.value = "";
 	};
+
+	const removeExistingByUrl = (url: string) => setExistingUrls((prev) => prev.filter((u) => u !== url));
+	const removeNewFile = (i: number) => setNewFiles((prev) => prev.filter((_, idx) => idx !== i));
+
+	async function urlToFile(url: string, nameHint = "existing") {
+		const res = await fetch(url, { credentials: "include" });
+		const blob = await res.blob();
+		const ext = (blob.type && blob.type.split("/")[1]) || "jpg";
+		const fileName = `${nameHint}.${ext}`;
+		return new File([blob], fileName, { type: blob.type || "image/jpeg" });
+	}
 
 	// initial loads
 	React.useEffect(() => {
@@ -146,8 +203,7 @@ export function AddBillboardDialog({
 		(async () => {
 			setProvLoading(true);
 			try {
-				const res = await listProvinces({ pageSize: 20 });
-				setProvOptions(res.data);
+				setProvOptions((await listProvinces({ pageSize: 20 })).data);
 			} finally {
 				setProvLoading(false);
 			}
@@ -183,9 +239,47 @@ export function AddBillboardDialog({
 	// province -> refresh city list
 	React.useEffect(() => {
 		if (!open) return;
-		setSelectedCity(null);
 		loadCities("", selectedProvince?.id);
 	}, [open, selectedProvince?.id, loadCities]);
+
+	// hydrate selected options’ names when the option lists arrive
+	React.useEffect(() => {
+		if (selectedProvince && !selectedProvince.name) {
+			const m = provOptions.find((p) => p.id === selectedProvince.id);
+			if (m) setSelectedProvince(m);
+		}
+	}, [provOptions]);
+	React.useEffect(() => {
+		if (selectedCity && !selectedCity.name) {
+			const m = cityOptions.find((c) => c.id === selectedCity.id);
+			if (m) setSelectedCity(m);
+		}
+	}, [cityOptions]);
+	React.useEffect(() => {
+		if (selectedCategory && !selectedCategory.name) {
+			const m = catOptions.find((c) => c.id === selectedCategory.id);
+			if (m) setSelectedCategory(m);
+		}
+	}, [catOptions]);
+
+	React.useEffect(() => {
+		if (!newFiles.length) {
+			setPreviews([]);
+			return;
+		}
+		const urls = newFiles.map((f) => URL.createObjectURL(f));
+		setPreviews(urls);
+		return () => urls.forEach((u) => URL.revokeObjectURL(u));
+	}, [newFiles]);
+
+	React.useEffect(() => {
+		if (formMode === "edit" && open) {
+			const urls = (initial?.images ?? []).map((im) => resolveImgUrl(im.url)).filter(Boolean) as string[];
+			setExistingUrls(urls);
+		} else {
+			setExistingUrls([]);
+		}
+	}, [formMode, open, initial?.images]);
 
 	const toNumber = (s: string) => {
 		if (!s) return undefined;
@@ -200,6 +294,9 @@ export function AddBillboardDialog({
 		if (!selectedCity?.id) return setError("City is required");
 		if (!location.trim()) return setError("Location is required");
 		if (!servicePrice.trim()) return setError("Service price is required");
+
+		const existingAsFiles = await Promise.all(existingUrls.map((u, i) => urlToFile(u, `existing-${i}`)));
+		const allImages: File[] = [...existingAsFiles, ...newFiles];
 
 		const payload: CreateBillboardInput = {
 			categoryId: selectedCategory.id,
@@ -216,43 +313,37 @@ export function AddBillboardDialog({
 			tax,
 			landOwnership,
 			servicePrice: toNumber(servicePrice),
-			images,
+			images: allImages,
 			...(mode === "Rent" ? { rentPrice: toNumber(rentPrice) } : {}),
 			...(mode === "Buy" ? { sellPrice: toNumber(sellPrice) } : {}),
 		} as any;
 
 		try {
 			setSaving(true);
-			await createBillboard(payload);
-			onCreated?.();
+			if (formMode === "create") {
+				await createBillboard(payload);
+			} else {
+				if (!billboardId) throw new Error("Missing billboardId");
+				await updateBillboard(billboardId, payload);
+			}
+			onSaved?.();
 			onClose();
-			setImages([]);
-			setRentPrice("");
-			setSellPrice("");
-			setServicePrice("");
+			setNewFiles([]);
 		} catch (e: any) {
-			setError(e?.message || "Failed to create billboard");
+			setError(e?.message || "Failed to save billboard");
 		} finally {
 			setSaving(false);
 		}
 	};
 
-	const showRent = mode === "Rent";
-	const showSell = mode === "Buy";
-
+	// -------------- JSX --------------
 	return (
 		<Dialog open={open} onClose={onClose} fullWidth maxWidth="md">
-			<DialogTitle>New Billboard</DialogTitle>
-			<DialogContent
-				dividers
-				sx={{
-					pt: 2,
-				}}
-			>
+			<DialogTitle>{formMode === "create" ? "New Billboard" : "Edit Billboard"}</DialogTitle>
+			<DialogContent dividers sx={{ pt: 2 }}>
 				<Stack spacing={2.5}>
 					{error && <Alert severity="error">{error}</Alert>}
-
-					{/* Section: Location */}
+					{/* Placement */}
 					<Section title="Placement">
 						<Grid container spacing={2}>
 							<Grid item xs={12} md={4}>
@@ -360,7 +451,6 @@ export function AddBillboardDialog({
 									required
 								/>
 							</Grid>
-
 							<Grid item xs={12}>
 								<TextField
 									label="Description"
@@ -374,7 +464,7 @@ export function AddBillboardDialog({
 						</Grid>
 					</Section>
 
-					{/* Section: Specs */}
+					{/* Specifications */}
 					<Section title="Specifications">
 						<Grid container spacing={2}>
 							<Grid item xs={12} md={3}>
@@ -386,7 +476,6 @@ export function AddBillboardDialog({
 									))}
 								</TextField>
 							</Grid>
-
 							<Grid item xs={12} md={3}>
 								<TextField
 									select
@@ -402,11 +491,9 @@ export function AddBillboardDialog({
 									))}
 								</TextField>
 							</Grid>
-
 							<Grid item xs={12} md={3}>
 								<TextField label="Size" value={size} onChange={(e) => setSize(e.target.value)} fullWidth />
 							</Grid>
-
 							<Grid item xs={12} md={3}>
 								<Autocomplete<Opt, false, false, false>
 									options={orientationOptions}
@@ -416,7 +503,6 @@ export function AddBillboardDialog({
 									renderInput={(params) => <TextField {...params} label="Orientation" fullWidth required />}
 								/>
 							</Grid>
-
 							<Grid item xs={12} md={3}>
 								<Autocomplete<Opt, false, false, false>
 									options={displayOptions}
@@ -426,7 +512,6 @@ export function AddBillboardDialog({
 									renderInput={(params) => <TextField {...params} label="Display" fullWidth required />}
 								/>
 							</Grid>
-
 							<Grid item xs={12} md={3}>
 								<Autocomplete<Opt, false, false, false>
 									options={lightingOptions}
@@ -436,7 +521,6 @@ export function AddBillboardDialog({
 									renderInput={(params) => <TextField {...params} label="Lighting" fullWidth required />}
 								/>
 							</Grid>
-
 							<Grid item xs={12} md={3}>
 								<Autocomplete<Opt, false, false, false>
 									options={taxOptions}
@@ -446,7 +530,6 @@ export function AddBillboardDialog({
 									renderInput={(params) => <TextField {...params} label="Tax" fullWidth required />}
 								/>
 							</Grid>
-
 							<Grid item xs={12} md={3}>
 								<Autocomplete<Opt, false, false, false>
 									options={landOptions}
@@ -459,7 +542,7 @@ export function AddBillboardDialog({
 						</Grid>
 					</Section>
 
-					{/* Section: Pricing */}
+					{/* Pricing */}
 					<Section title="Pricing">
 						<Grid container spacing={2}>
 							{mode === "Rent" && (
@@ -493,8 +576,7 @@ export function AddBillboardDialog({
 							</Grid>
 						</Grid>
 					</Section>
-
-					{/* Section: Images */}
+					{/* Images */}
 					<Section title="Images">
 						<Stack spacing={1.5}>
 							<Button variant="outlined" component="label" sx={{ alignSelf: "flex-start" }}>
@@ -502,6 +584,57 @@ export function AddBillboardDialog({
 								<input type="file" accept="image/*" multiple hidden onChange={handleImageSelect} />
 							</Button>
 
+							{/* Existing */}
+							{formMode === "edit" && existingUrls.length > 0 && (
+								<Grid container spacing={2}>
+									{existingUrls.map((url) => (
+										<Grid item xs={6} sm={4} md={3} key={url}>
+											<Box
+												sx={{
+													position: "relative",
+													borderRadius: 1.5,
+													overflow: "hidden",
+													border: "1px solid",
+													borderColor: "divider",
+												}}
+											>
+												<img
+													src={url}
+													alt=""
+													style={{ width: "100%", height: 160, objectFit: "cover", display: "block" }}
+													referrerPolicy="no-referrer"
+													crossOrigin="anonymous"
+												/>
+												<Button
+													size="small"
+													onClick={() => removeExistingByUrl(url)}
+													sx={{
+														position: "absolute",
+														top: 6,
+														right: 6,
+														minWidth: 0,
+														width: 28,
+														height: 28,
+														borderRadius: "50%",
+														p: 0,
+														fontSize: "1rem",
+														fontWeight: "bold",
+														lineHeight: 1,
+														color: "white",
+														backgroundColor: "error.main",
+														boxShadow: 3,
+														"&:hover": { backgroundColor: "error.dark" },
+													}}
+												>
+													✕
+												</Button>
+											</Box>
+										</Grid>
+									))}
+								</Grid>
+							)}
+
+							{/* New */}
 							{previews.length > 0 && (
 								<Grid container spacing={2}>
 									{previews.map((src, idx) => (
@@ -515,7 +648,6 @@ export function AddBillboardDialog({
 													borderColor: "divider",
 												}}
 											>
-												{/* eslint-disable-next-line @next/next/no-img-element */}
 												<img
 													src={src}
 													alt={`preview-${idx}`}
@@ -523,7 +655,7 @@ export function AddBillboardDialog({
 												/>
 												<Button
 													size="small"
-													onClick={() => setImages((prev) => prev.filter((_, i) => i !== idx))}
+													onClick={() => removeNewFile(idx)}
 													sx={{
 														position: "absolute",
 														top: 6,
@@ -559,14 +691,13 @@ export function AddBillboardDialog({
 					Cancel
 				</Button>
 				<Button onClick={handleSubmit} variant="contained" disabled={saving}>
-					{saving ? "Saving…" : "Create"}
+					{saving ? "Saving…" : formMode === "create" ? "Create" : "Save changes"}
 				</Button>
 			</DialogActions>
 		</Dialog>
 	);
 }
 
-// Small helper to give each section a title + divider and consistent spacing
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
 	return (
 		<Stack spacing={1.25}>

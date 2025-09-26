@@ -133,6 +133,11 @@ function fdSet(fd: FormData, k: string, v: unknown) {
   fd.append(k, String(v));
 }
 
+const clean = (obj: Record<string, any>) =>
+  Object.fromEntries(
+    Object.entries(obj).filter(([_, v]) => !(v === undefined || v === null || v === ""))
+  );
+
 // ---------- List ----------
 export async function listBillboards(params: {
   page?: number; pageSize?: number; search?: string;
@@ -278,56 +283,35 @@ export type UpdateBillboardInput = Partial<CreateBillboardInput> & {
   imagesDeleteIds?: string[]; // if your DTO supports it
 };
 
-export async function updateBillboard(id: string, input: UpdateBillboardInput) {
+export async function updateBillboard(id: string, input: any) {
   try {
-    const hasFiles = !!input.images?.length;
-    if (hasFiles || input.imagesDeleteIds?.length) {
-      const fd = new FormData();
-      ([
-        "categoryId", "description", "location", "cityId", "provinceId", "status", "mode",
-        "size", "orientation", "display", "lighting", "tax", "landOwnership"
-      ] as const).forEach((k) => fdSet(fd, k, (input as any)[k]));
+    const fd = new FormData();
 
-      const rent = toIDRNumber(input.rentPrice);
-      const sell = toIDRNumber(input.sellPrice);
-      const service = toIDRNumber(input.servicePrice);
-      if (rent !== undefined) fdSet(fd, "rentPrice", rent);
-      if (sell !== undefined) fdSet(fd, "sellPrice", sell);
-      if (service !== undefined) fdSet(fd, "servicePrice", service);
+    // scalars
+    ([
+      "categoryId", "description", "location", "cityId", "provinceId", "status", "mode",
+      "size", "orientation", "display", "lighting", "tax", "landOwnership",
+      "gPlaceId", "formattedAddress", "latitude", "longitude", "addressComponents", "mapViewport"
+    ] as const).forEach((k) => {
+      const v = (input as any)[k];
+      if (v !== undefined && v !== null && v !== "") fd.append(k, typeof v === "object" ? JSON.stringify(v) : String(v));
+    });
 
-      input.images?.forEach((f) => fd.append("images", f));
-      input.imagesDeleteIds?.forEach((id) => fd.append("imagesDeleteIds[]", id)); // only if DTO allows
+    const num = (n: any) => (n === undefined || n === null || n === "" ? undefined : Number(String(n).replace(/[^\d.-]/g, "")));
+    const rent = num(input.rentPrice);
+    const sell = num(input.sellPrice);
+    const service = num(input.servicePrice);
+    if (rent !== undefined) fd.append("rentPrice", String(rent));
+    if (sell !== undefined) fd.append("sellPrice", String(sell));
+    if (service !== undefined) fd.append("servicePrice", String(service));
 
-      const { data } = await api.patch<{ status: boolean; message: string; data: BillboardDetail }>(
-        `/billboard/${id}`,
-        fd,
-        { headers: { "Content-Type": "multipart/form-data" } }
-      );
-      return data.data;
-    } else {
-      const payload: Record<string, any> = {};
-      ([
-        "categoryId", "description", "location", "cityId", "provinceId", "status", "mode",
-        "size", "orientation", "display", "lighting", "tax", "landOwnership"
-      ] as const).forEach((k) => {
-        const v = (input as any)[k];
-        if (v !== undefined && v !== null && v !== "") payload[k] = v;
-      });
-      const rent = toIDRNumber(input.rentPrice);
-      const sell = toIDRNumber(input.sellPrice);
-      const service = toIDRNumber(input.servicePrice);
-      if (rent !== undefined) payload.rentPrice = rent;
-      if (sell !== undefined) payload.sellPrice = sell;
-      if (service !== undefined) payload.servicePrice = service;
+    // images: must be File objects (existing + new)
+    (input.images as File[]).forEach((f) => fd.append("images", f));
 
-      if (input.imagesDeleteIds?.length) payload.imagesDeleteIds = input.imagesDeleteIds;
-
-      const { data } = await api.patch<{ status: boolean; message: string; data: BillboardDetail }>(
-        `/billboard/${id}`,
-        payload
-      );
-      return data.data;
-    }
+    const { data } = await api.patch(`/billboard/${id}`, fd, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+    return data?.data ?? data;
   } catch (e) {
     throw new Error(extractErrorMessage(e));
   }

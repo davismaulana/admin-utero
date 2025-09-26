@@ -6,9 +6,22 @@ import { listSellers, type SellerRow } from "@/services/sellers";
 import { deleteUser, type UserRow } from "@/services/users"; // keep if you still delete via user API
 import DeleteIcon from "@mui/icons-material/Delete";
 import VisibilityIcon from "@mui/icons-material/Visibility";
-import { Alert, Avatar, Box, Button, Chip, IconButton, Snackbar, Stack, TextField, Tooltip, Typography } from "@mui/material";
+import {
+	Alert,
+	Avatar,
+	Box,
+	Button,
+	Chip,
+	IconButton,
+	Snackbar,
+	Stack,
+	TextField,
+	Tooltip,
+	Typography,
+} from "@mui/material";
 import { DataGrid, GridColDef, GridSortModel } from "@mui/x-data-grid";
 
+import { Gate } from "@/lib/gate";
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
 import { SellerDetailDialog } from "@/components/dashboard/sellers/merchant-detail-dialog";
 
@@ -137,87 +150,89 @@ export default function SellersPage() {
 	];
 
 	return (
-		<Box sx={{ p: 2 }}>
-			<Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
-				<Stack direction="row" spacing={1} alignItems="center">
-					<Typography variant="h5">Sellers</Typography>
-					<Chip label={`Total: ${totalCount.toLocaleString()}`} size="small" variant="outlined" />
-				</Stack>
-				<Stack direction="row" spacing={1}>
-					<TextField
-						size="small"
-						placeholder="Search fullname/company/npwp/ktp"
-						value={search}
-						onChange={(e) => setSearch(e.target.value)}
-						onKeyDown={(e) => {
-							if (e.key === "Enter") {
+		<Gate allowed={["ADMIN"]}>
+			<Box sx={{ p: 2 }}>
+				<Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
+					<Stack direction="row" spacing={1} alignItems="center">
+						<Typography variant="h5">Sellers</Typography>
+						<Chip label={`Total: ${totalCount.toLocaleString()}`} size="small" variant="outlined" />
+					</Stack>
+					<Stack direction="row" spacing={1}>
+						<TextField
+							size="small"
+							placeholder="Search fullname/company/npwp/ktp"
+							value={search}
+							onChange={(e) => setSearch(e.target.value)}
+							onKeyDown={(e) => {
+								if (e.key === "Enter") {
+									setPage(0);
+									fetchData();
+								}
+							}}
+						/>
+						<Button
+							variant="contained"
+							onClick={() => {
 								setPage(0);
 								fetchData();
-							}
-						}}
-					/>
-					<Button
-						variant="contained"
-						onClick={() => {
-							setPage(0);
-							fetchData();
-						}}
-					>
-						Search
-					</Button>
+							}}
+						>
+							Search
+						</Button>
+					</Stack>
 				</Stack>
-			</Stack>
-			<div style={{ height: 600, width: "100%" }}>
-				<DataGrid
-					rows={rows}
-					columns={columns}
-					getRowId={(r) => r.id}
-					loading={loading}
-					pagination
-					paginationMode="server"
-					rowCount={rowCount}
-					paginationModel={{ page, pageSize }}
-					onPaginationModelChange={(m) => {
-						setPage(m.page);
-						setPageSize(m.pageSize);
+				<div style={{ height: 600, width: "100%" }}>
+					<DataGrid
+						rows={rows}
+						columns={columns}
+						getRowId={(r) => r.id}
+						loading={loading}
+						pagination
+						paginationMode="server"
+						rowCount={rowCount}
+						paginationModel={{ page, pageSize }}
+						onPaginationModelChange={(m) => {
+							setPage(m.page);
+							setPageSize(m.pageSize);
+						}}
+						sortingMode="server"
+						sortModel={sortModel}
+						onSortModelChange={setSortModel}
+						pageSizeOptions={[5, 10, 20, 50]}
+						disableRowSelectionOnClick
+					/>
+				</div>
+				<SellerDetailDialog open={detailOpen} sellerId={detailId} onClose={() => setDetailOpen(false)} />
+				{/* Delete */}
+				<ConfirmDialog
+					open={confirmOpen}
+					onClose={() => setConfirmOpen(false)}
+					onConfirm={async () => {
+						if (toDelete) {
+							// If you have a /seller delete endpoint, switch this to deleteMerchant(toDelete.id)
+							await deleteUser(toDelete.userId || toDelete.id); // deleting the underlying user (current flow)
+							setToast({ msg: "Seller deleted", severity: "success" });
+							setConfirmOpen(false);
+							setToDelete(null);
+							await fetchData();
+						}
 					}}
-					sortingMode="server"
-					sortModel={sortModel}
-					onSortModelChange={setSortModel}
-					pageSizeOptions={[5, 10, 20, 50]}
-					disableRowSelectionOnClick
+					title="Delete seller"
+					content={`Delete ${toDelete?.fullname ?? "this seller"}? This cannot be undone.`}
 				/>
-			</div>
-			<SellerDetailDialog open={detailOpen} sellerId={detailId} onClose={() => setDetailOpen(false)} />
-			{/* Delete */}
-			<ConfirmDialog
-				open={confirmOpen}
-				onClose={() => setConfirmOpen(false)}
-				onConfirm={async () => {
-					if (toDelete) {
-						// If you have a /seller delete endpoint, switch this to deleteMerchant(toDelete.id)
-						await deleteUser(toDelete.userId || toDelete.id); // deleting the underlying user (current flow)
-						setToast({ msg: "Seller deleted", severity: "success" });
-						setConfirmOpen(false);
-						setToDelete(null);
-						await fetchData();
-					}
-				}}
-				title="Delete seller"
-				content={`Delete ${toDelete?.fullname ?? "this seller"}? This cannot be undone.`}
-			/>
-			<Snackbar
-				open={!!toast}
-				autoHideDuration={1800}
-				onClose={() => setToast(null)}
-				anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
-			>
-				{toast ? (
-					<Alert onClose={() => setToast(null)} severity={toast.severity} variant="filled" sx={{ width: "100%" }}>
-						{toast.msg}
-					</Alert>
-				) : undefined}
-			</Snackbar>{" "}
-		</Box>
+				<Snackbar
+					open={!!toast}
+					autoHideDuration={1800}
+					onClose={() => setToast(null)}
+					anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+				>
+					{toast ? (
+						<Alert onClose={() => setToast(null)} severity={toast.severity} variant="filled" sx={{ width: "100%" }}>
+							{toast.msg}
+						</Alert>
+					) : undefined}
+				</Snackbar>{" "}
+			</Box>
+		</Gate>
 	);
 }

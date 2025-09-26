@@ -7,6 +7,7 @@ import RestoreFromTrashIcon from "@mui/icons-material/RestoreFromTrash";
 import { Alert, Avatar, Box, Chip, IconButton, Snackbar, Stack, TextField, Tooltip, Typography } from "@mui/material";
 import { DataGrid, GridColDef, GridSortModel } from "@mui/x-data-grid";
 
+import { Gate } from "@/components/auth/Gate";
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ?? "";
@@ -205,90 +206,92 @@ export default function RecycleBinPage() {
 	];
 
 	return (
-		<Box sx={{ p: 2 }}>
-			<Stack
-				direction="row"
-				alignItems="center"
-				justifyContent="space-between"
-				sx={{ mb: 2, gap: 1, flexWrap: "wrap" }}
-			>
-				<Stack direction="row" spacing={1} alignItems="center">
-					<Typography variant="h5">Recycle Bin</Typography>
-					<Chip label={`Total: ${totalCount.toLocaleString()}`} size="small" variant="outlined" />
-				</Stack>
+		<Gate allowed={["ADMIN"]}>
+			<Box sx={{ p: 2 }}>
+				<Stack
+					direction="row"
+					alignItems="center"
+					justifyContent="space-between"
+					sx={{ mb: 2, gap: 1, flexWrap: "wrap" }}
+				>
+					<Stack direction="row" spacing={1} alignItems="center">
+						<Typography variant="h5">Recycle Bin</Typography>
+						<Chip label={`Total: ${totalCount.toLocaleString()}`} size="small" variant="outlined" />
+					</Stack>
 
-				<Stack direction="row" spacing={1} alignItems="center" sx={{ flexWrap: "wrap" }}>
-					<TextField
-						size="small"
-						placeholder="Search location/description"
-						value={search}
-						onChange={(e) => setSearch(e.target.value)}
-						onKeyDown={(e) => {
-							if (e.key === "Enter") {
-								setPage(0);
-								fetchData();
-							}
-						}}
-					/>
+					<Stack direction="row" spacing={1} alignItems="center" sx={{ flexWrap: "wrap" }}>
+						<TextField
+							size="small"
+							placeholder="Search location/description"
+							value={search}
+							onChange={(e) => setSearch(e.target.value)}
+							onKeyDown={(e) => {
+								if (e.key === "Enter") {
+									setPage(0);
+									fetchData();
+								}
+							}}
+						/>
+					</Stack>
 				</Stack>
-			</Stack>
-			<div style={{ height: 600, width: "100%" }}>
-				<DataGrid
-					rows={rows}
-					columns={columns}
-					getRowId={(r) => r.id}
-					loading={loading}
-					pagination
-					paginationMode="server"
-					rowCount={rowCount}
-					paginationModel={{ page, pageSize }}
-					onPaginationModelChange={(m) => {
-						setPage(m.page);
-						setPageSize(m.pageSize);
+				<div style={{ height: 600, width: "100%" }}>
+					<DataGrid
+						rows={rows}
+						columns={columns}
+						getRowId={(r) => r.id}
+						loading={loading}
+						pagination
+						paginationMode="server"
+						rowCount={rowCount}
+						paginationModel={{ page, pageSize }}
+						onPaginationModelChange={(m) => {
+							setPage(m.page);
+							setPageSize(m.pageSize);
+						}}
+						sortingMode="client"
+						sortModel={sortModel}
+						onSortModelChange={setSortModel}
+						pageSizeOptions={[5, 10, 20, 50]}
+						disableRowSelectionOnClick
+					/>
+				</div>
+				{/* Purge confirm */}
+				<ConfirmDialog
+					open={confirmOpen}
+					onClose={() => setConfirmOpen(false)}
+					title="Permanently delete billboard?"
+					content={`This will permanently delete "${
+						toPurge?.location ?? "this billboard"
+					}" and its related data. This cannot be undone. Continue?`}
+					onConfirm={async () => {
+						if (!toPurge || purging) return;
+						try {
+							setPurging(true);
+							await purgeBillboard(toPurge.id); // sends ?confirm=true inside service
+							setToast({ msg: "Billboard permanently deleted", severity: "success" });
+							setConfirmOpen(false);
+							setToPurge(null);
+							await fetchData();
+						} catch (e: any) {
+							setToast(e?.message ?? "Failed to purge billboard");
+						} finally {
+							setPurging(false);
+						}
 					}}
-					sortingMode="client"
-					sortModel={sortModel}
-					onSortModelChange={setSortModel}
-					pageSizeOptions={[5, 10, 20, 50]}
-					disableRowSelectionOnClick
 				/>
-			</div>
-			{/* Purge confirm */}
-			<ConfirmDialog
-				open={confirmOpen}
-				onClose={() => setConfirmOpen(false)}
-				title="Permanently delete billboard?"
-				content={`This will permanently delete "${
-					toPurge?.location ?? "this billboard"
-				}" and its related data. This cannot be undone. Continue?`}
-				onConfirm={async () => {
-					if (!toPurge || purging) return;
-					try {
-						setPurging(true);
-						await purgeBillboard(toPurge.id); // sends ?confirm=true inside service
-						setToast({ msg: "Billboard permanently deleted", severity: "success" });
-						setConfirmOpen(false);
-						setToPurge(null);
-						await fetchData();
-					} catch (e: any) {
-						setToast(e?.message ?? "Failed to purge billboard");
-					} finally {
-						setPurging(false);
-					}
-				}}
-			/>
-			<Snackbar
-				open={!!toast}
-				autoHideDuration={1800}
-				onClose={() => setToast(null)}
-				anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
-			>
-				{toast ? (
-					<Alert onClose={() => setToast(null)} severity={toast.severity} variant="filled" sx={{ width: "100%" }}>
-						{toast.msg}
-					</Alert>
-				) : undefined}
-			</Snackbar>{" "}
-		</Box>
+				<Snackbar
+					open={!!toast}
+					autoHideDuration={1800}
+					onClose={() => setToast(null)}
+					anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+				>
+					{toast ? (
+						<Alert onClose={() => setToast(null)} severity={toast.severity} variant="filled" sx={{ width: "100%" }}>
+							{toast.msg}
+						</Alert>
+					) : undefined}
+				</Snackbar>{" "}
+			</Box>
+		</Gate>
 	);
 }

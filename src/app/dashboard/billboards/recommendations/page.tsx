@@ -7,7 +7,7 @@ import { listCities, listProvinces, type CityRow, type ProvinceRow } from "@/ser
 import RefreshIcon from "@mui/icons-material/Refresh";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import {
-  Alert,
+	Alert,
 	Autocomplete,
 	Avatar,
 	Box,
@@ -26,6 +26,7 @@ import {
 } from "@mui/material";
 import { DataGrid, GridColDef, GridSortModel } from "@mui/x-data-grid";
 
+import { Gate } from "@/components/auth/Gate";
 import { BillboardDetailDialog } from "@/components/dashboard/billboards/billboard-detail-dialog";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ?? "";
@@ -305,174 +306,176 @@ export default function RecommendationsPage() {
 	];
 
 	return (
-		<Box sx={{ p: 2 }}>
-			<Stack
-				direction="row"
-				alignItems="center"
-				justifyContent="space-between"
-				sx={{ mb: 2, gap: 1, flexWrap: "wrap" }}
-			>
-				<Stack direction="row" spacing={1} alignItems="center">
-					<Typography variant="h5">Recommendations (Diagnostics)</Typography>
-					<Chip label={`Total: ${rowCount.toLocaleString()}`} size="small" variant="outlined" />
-				</Stack>
+		<Gate allowed={["ADMIN"]}>
+			<Box sx={{ p: 2 }}>
+				<Stack
+					direction="row"
+					alignItems="center"
+					justifyContent="space-between"
+					sx={{ mb: 2, gap: 1, flexWrap: "wrap" }}
+				>
+					<Stack direction="row" spacing={1} alignItems="center">
+						<Typography variant="h5">Recommendations (Diagnostics)</Typography>
+						<Chip label={`Total: ${rowCount.toLocaleString()}`} size="small" variant="outlined" />
+					</Stack>
 
-				<Stack direction="row" spacing={1} alignItems="center" sx={{ flexWrap: "wrap" }}>
-					{/* Live text search (debounced) */}
-					<TextField
-						size="small"
-						placeholder="Search location/description"
-						value={search}
-						onChange={(e) => setSearch(e.target.value)}
-					/>
+					<Stack direction="row" spacing={1} alignItems="center" sx={{ flexWrap: "wrap" }}>
+						{/* Live text search (debounced) */}
+						<TextField
+							size="small"
+							placeholder="Search location/description"
+							value={search}
+							onChange={(e) => setSearch(e.target.value)}
+						/>
 
-					{/* Category (server-side) */}
-					<FormControl size="small" sx={{ minWidth: 180 }}>
-						<InputLabel id="cat-label">Category</InputLabel>
-						<Select
-							labelId="cat-label"
-							label="Category"
-							value={categoryId}
-							onChange={(e) => {
-								setCategoryId(e.target.value);
-								setPage(0);
-							}}
-						>
-							<MenuItem value="">All</MenuItem>
-							{categoryOptions.map((c) => (
-								<MenuItem key={c.id} value={c.id}>
-									{c.name}
-								</MenuItem>
-							))}
-						</Select>
-					</FormControl>
-
-					{/* Province Autocomplete (with search) */}
-					<Autocomplete
-						sx={{ minWidth: 220 }}
-						size="small"
-						options={provinceOptions}
-						getOptionLabel={(o) => o.name || ""}
-						value={selectedProvince}
-						onChange={(_e, v) => {
-							setSelectedProvince(v);
-							setSelectedCity(null);
-							loadCities(cityInput, v?.id);
-						}}
-						inputValue={provinceInput}
-						onInputChange={(_e, v) => {
-							setProvinceInput(v);
-							loadProvinces(v);
-						}}
-						loading={provinceLoading}
-						renderInput={(params) => (
-							<TextField
-								{...params}
-								label="Province"
-								InputProps={{
-									...params.InputProps,
-									endAdornment: (
-										<>
-											{provinceLoading ? <CircularProgress size={18} /> : null}
-											{params.InputProps.endAdornment}
-										</>
-									),
-								}}
-							/>
-						)}
-					/>
-
-					{/* City Autocomplete (scoped by province when selected) */}
-					<Autocomplete
-						sx={{ minWidth: 220 }}
-						size="small"
-						options={cityOptions}
-						getOptionLabel={(o) => o.name || ""}
-						value={selectedCity}
-						onChange={(_e, v) => setSelectedCity(v)}
-						inputValue={cityInput}
-						onInputChange={(_e, v) => {
-							setCityInput(v);
-							loadCities(v, selectedProvince?.id);
-						}}
-						loading={cityLoading}
-						renderInput={(params) => (
-							<TextField
-								{...params}
-								label="City"
-								InputProps={{
-									...params.InputProps,
-									endAdornment: (
-										<>
-											{cityLoading ? <CircularProgress size={18} /> : null}
-											{params.InputProps.endAdornment}
-										</>
-									),
-								}}
-							/>
-						)}
-					/>
-
-					{/* Recompute */}
-					<Tooltip title="Recompute scores">
-						<span>
-							<IconButton
-								color="primary"
-								disabled={recomputing}
-								onClick={async () => {
-									try {
-										setRecomputing(true);
-										const res = await recomputeRecommendations();
-										setToast({ msg: `Scores recomputed. Updated: ${res.updated}`, severity: "success" });
-
-										await fetchData();
-									} catch (e: any) {
-										setToast(e?.message ?? "Failed to recompute");
-									} finally {
-										setRecomputing(false);
-									}
+						{/* Category (server-side) */}
+						<FormControl size="small" sx={{ minWidth: 180 }}>
+							<InputLabel id="cat-label">Category</InputLabel>
+							<Select
+								labelId="cat-label"
+								label="Category"
+								value={categoryId}
+								onChange={(e) => {
+									setCategoryId(e.target.value);
+									setPage(0);
 								}}
 							>
-								<RefreshIcon />
-							</IconButton>
-						</span>
-					</Tooltip>
+								<MenuItem value="">All</MenuItem>
+								{categoryOptions.map((c) => (
+									<MenuItem key={c.id} value={c.id}>
+										{c.name}
+									</MenuItem>
+								))}
+							</Select>
+						</FormControl>
+
+						{/* Province Autocomplete (with search) */}
+						<Autocomplete
+							sx={{ minWidth: 220 }}
+							size="small"
+							options={provinceOptions}
+							getOptionLabel={(o) => o.name || ""}
+							value={selectedProvince}
+							onChange={(_e, v) => {
+								setSelectedProvince(v);
+								setSelectedCity(null);
+								loadCities(cityInput, v?.id);
+							}}
+							inputValue={provinceInput}
+							onInputChange={(_e, v) => {
+								setProvinceInput(v);
+								loadProvinces(v);
+							}}
+							loading={provinceLoading}
+							renderInput={(params) => (
+								<TextField
+									{...params}
+									label="Province"
+									InputProps={{
+										...params.InputProps,
+										endAdornment: (
+											<>
+												{provinceLoading ? <CircularProgress size={18} /> : null}
+												{params.InputProps.endAdornment}
+											</>
+										),
+									}}
+								/>
+							)}
+						/>
+
+						{/* City Autocomplete (scoped by province when selected) */}
+						<Autocomplete
+							sx={{ minWidth: 220 }}
+							size="small"
+							options={cityOptions}
+							getOptionLabel={(o) => o.name || ""}
+							value={selectedCity}
+							onChange={(_e, v) => setSelectedCity(v)}
+							inputValue={cityInput}
+							onInputChange={(_e, v) => {
+								setCityInput(v);
+								loadCities(v, selectedProvince?.id);
+							}}
+							loading={cityLoading}
+							renderInput={(params) => (
+								<TextField
+									{...params}
+									label="City"
+									InputProps={{
+										...params.InputProps,
+										endAdornment: (
+											<>
+												{cityLoading ? <CircularProgress size={18} /> : null}
+												{params.InputProps.endAdornment}
+											</>
+										),
+									}}
+								/>
+							)}
+						/>
+
+						{/* Recompute */}
+						<Tooltip title="Recompute scores">
+							<span>
+								<IconButton
+									color="primary"
+									disabled={recomputing}
+									onClick={async () => {
+										try {
+											setRecomputing(true);
+											const res = await recomputeRecommendations();
+											setToast({ msg: `Scores recomputed. Updated: ${res.updated}`, severity: "success" });
+
+											await fetchData();
+										} catch (e: any) {
+											setToast(e?.message ?? "Failed to recompute");
+										} finally {
+											setRecomputing(false);
+										}
+									}}
+								>
+									<RefreshIcon />
+								</IconButton>
+							</span>
+						</Tooltip>
+					</Stack>
 				</Stack>
-			</Stack>
-			<div style={{ height: 600, width: "100%" }}>
-				<DataGrid<BillboardGridRow>
-					rows={displayedRows}
-					columns={columns}
-					getRowId={(r) => r.id}
-					loading={loading}
-					pagination
-					paginationMode="server"
-					rowCount={rowCount}
-					paginationModel={{ page, pageSize }}
-					onPaginationModelChange={(m) => {
-						setPage(m.page);
-						setPageSize(m.pageSize);
-					}}
-					sortingMode="client"
-					sortModel={sortModel}
-					onSortModelChange={setSortModel}
-					pageSizeOptions={[5, 10, 20, 50]}
-					disableRowSelectionOnClick
-				/>
-			</div>
-			<BillboardDetailDialog open={detailOpen} billboardId={detailId} onClose={() => setDetailOpen(false)} />
-			<Snackbar
-				open={!!toast}
-				autoHideDuration={1800}
-				onClose={() => setToast(null)}
-				anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
-			>
-				{toast ? (
-					<Alert onClose={() => setToast(null)} severity={toast.severity} variant="filled" sx={{ width: "100%" }}>
-						{toast.msg}
-					</Alert>
-				) : undefined}
-			</Snackbar>{" "}
-		</Box>
+				<div style={{ height: 600, width: "100%" }}>
+					<DataGrid<BillboardGridRow>
+						rows={displayedRows}
+						columns={columns}
+						getRowId={(r) => r.id}
+						loading={loading}
+						pagination
+						paginationMode="server"
+						rowCount={rowCount}
+						paginationModel={{ page, pageSize }}
+						onPaginationModelChange={(m) => {
+							setPage(m.page);
+							setPageSize(m.pageSize);
+						}}
+						sortingMode="client"
+						sortModel={sortModel}
+						onSortModelChange={setSortModel}
+						pageSizeOptions={[5, 10, 20, 50]}
+						disableRowSelectionOnClick
+					/>
+				</div>
+				<BillboardDetailDialog open={detailOpen} billboardId={detailId} onClose={() => setDetailOpen(false)} />
+				<Snackbar
+					open={!!toast}
+					autoHideDuration={1800}
+					onClose={() => setToast(null)}
+					anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+				>
+					{toast ? (
+						<Alert onClose={() => setToast(null)} severity={toast.severity} variant="filled" sx={{ width: "100%" }}>
+							{toast.msg}
+						</Alert>
+					) : undefined}
+				</Snackbar>{" "}
+			</Box>
+		</Gate>
 	);
 }

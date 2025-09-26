@@ -84,14 +84,17 @@ export function NotificationsToaster({
 			open={open}
 			autoHideDuration={5000}
 			onClose={() => setOpen(false)}
-			// ⬇️ render above everything and away from the grid footer
 			anchorOrigin={{ vertical: "top", horizontal: "right" }}
 			sx={{ zIndex: (t) => t.zIndex.tooltip + 1 }}
-			// (optional) force portal to <body>, guards SSR
 		>
 			<Alert
+				// Clicking anywhere on the alert navigates
 				onClick={go}
-				onClose={() => setOpen(false)}
+				// But clicking the X now ONLY closes (no navigation)
+				onClose={(e) => {
+					e?.stopPropagation?.();
+					setOpen(false);
+				}}
 				severity="info"
 				variant="filled"
 				sx={{ width: "100%", cursor: "pointer" }}

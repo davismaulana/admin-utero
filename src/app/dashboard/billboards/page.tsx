@@ -4,6 +4,7 @@ import * as React from "react";
 import { deleteBillboard, listBillboards, type BillboardRow } from "@/services/billboards";
 import { listCities, listProvinces, type CityRow, type ProvinceRow } from "@/services/locations";
 import DeleteIcon from "@mui/icons-material/Delete";
+import EditIcon from "@mui/icons-material/Edit";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import {
 	Alert,
@@ -22,9 +23,10 @@ import {
 } from "@mui/material";
 import { DataGrid, GridColDef, GridSortModel } from "@mui/x-data-grid";
 
+import { Gate } from "@/components/auth/Gate";
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
 import { BillboardDetailDialog } from "@/components/dashboard/billboards/billboard-detail-dialog";
-import { AddBillboardDialog } from "@/components/dashboard/billboards/billboard-form-dialog";
+import { BillboardFormDialog } from "@/components/dashboard/billboards/billboard-form-dialog";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ?? "";
 const fmtDate = new Intl.DateTimeFormat("id-ID", { dateStyle: "medium", timeStyle: "short" });
@@ -78,6 +80,9 @@ export default function BillboardsPage() {
 	const [selectedCategory, setSelectedCategory] = React.useState<CategoryRow | null>(null);
 
 	const [openAdd, setOpenAdd] = React.useState(false);
+
+	const [editOpen, setEditOpen] = React.useState(false);
+	const [editingRow, setEditingRow] = React.useState<BillboardRow | null>(null);
 
 	// Load table
 	const fetchData = React.useCallback(async () => {
@@ -282,6 +287,21 @@ export default function BillboardsPage() {
 							<VisibilityIcon fontSize="small" />
 						</IconButton>
 					</Tooltip>
+
+					<Gate allowed={["SELLER"]}>
+						<Tooltip title="Edit">
+							<IconButton
+								size="small"
+								onClick={() => {
+									setEditingRow(params.row);
+									setEditOpen(true);
+								}}
+							>
+								<EditIcon fontSize="small" />
+							</IconButton>
+						</Tooltip>
+					</Gate>
+
 					<Tooltip title="Delete">
 						<IconButton
 							size="small"
@@ -423,15 +443,12 @@ export default function BillboardsPage() {
 							/>
 						)}
 					/>
-
-					<Button variant="contained" onClick={() => setOpenAdd(true)}>
-						Add billboard
-					</Button>
-					<AddBillboardDialog
-						open={openAdd}
-						onClose={() => setOpenAdd(false)}
-						onCreated={() => fetchData()} // refresh table
-					/>
+					<Gate allowed={["SELLER"]}>
+						<Button variant="contained" onClick={() => setOpenAdd(true)}>
+							Add billboard
+						</Button>
+						<BillboardFormDialog open={openAdd} mode="create" onClose={() => setOpenAdd(false)} onSaved={fetchData} />
+					</Gate>
 				</Stack>
 			</Stack>
 
@@ -495,6 +512,45 @@ export default function BillboardsPage() {
 					</Alert>
 				) : undefined}
 			</Snackbar>
+
+			{editingRow && (
+				<BillboardFormDialog
+					open={editOpen}
+					mode="edit"
+					billboardId={editingRow.id}
+					initial={{
+						id: editingRow.id,
+						category: (editingRow as any).category ?? null,
+						categoryId: (editingRow as any).category?.id ?? (editingRow as any).categoryId,
+						city: (editingRow as any).city ?? null,
+						cityId: (editingRow as any).city?.id ?? (editingRow as any).cityId,
+						province: (editingRow as any).city?.province ?? null,
+						provinceId: (editingRow as any).provinceId,
+						mode: editingRow.mode as any,
+						status: editingRow.status as any,
+						size: editingRow.size ?? "",
+						orientation: editingRow.orientation ?? "",
+						display: editingRow.display ?? "",
+						lighting: editingRow.lighting ?? "",
+						tax: editingRow.tax ?? "",
+						landOwnership: (editingRow as any).landOwnership ?? "",
+						location: editingRow.location ?? "",
+						description: (editingRow as any).description ?? "",
+						rentPrice: (editingRow as any).rentPrice ?? "",
+						sellPrice: (editingRow as any).sellPrice ?? "",
+						servicePrice: (editingRow as any).servicePrice ?? "",
+						images: ((editingRow as any).image ?? []).map((im: any) => ({
+							id: im.id,
+							url: im.url,
+						})),
+					}}
+					onClose={() => {
+						setEditOpen(false);
+						setEditingRow(null);
+					}}
+					onSaved={fetchData}
+				/>
+			)}
 		</Box>
 	);
 }
